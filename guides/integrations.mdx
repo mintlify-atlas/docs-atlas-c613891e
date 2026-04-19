@@ -1,0 +1,185 @@
+---
+title: "Integrating UglifyJS into build pipelines"
+description: "Use UglifyJS with webpack, Gulp, Rollup, npm scripts, and the Node.js API to minify JavaScript as part of any automated build workflow."
+---
+
+UglifyJS integrates into virtually any JavaScript build pipeline through its programmatic API or its CLI. The Node.js API gives you the most control and works directly in custom build scripts, while CLI invocations fit naturally into npm scripts and shell pipelines. For framework-specific toolchains, wrapper plugins are available for the most common build tools.
+
+<Note>
+UglifyJS processes ES5 and most ECMAScript features natively. For code that uses exotic language features not yet supported by UglifyJS, transpile with [Babel](https://babeljs.io/) first before passing the output to UglifyJS.
+</Note>
+
+## General Node.js API pattern
+
+The `minify()` function is the single entry point for all programmatic usage. It accepts a string or an object of filename-to-source mappings, and returns an object with `code`, `map`, and `error` fields.
+
+```javascript
+var UglifyJS = require("uglify-js");
+var fs = require("fs");
+
+var code = fs.readFileSync("input.js", "utf8");
+var result = UglifyJS.minify(code, {
+    compress: true,
+    mangle: true,
+    sourceMap: { url: "output.min.js.map" }
+});
+
+if (result.error) throw result.error;
+
+fs.writeFileSync("output.min.js", result.code);
+if (result.map) fs.writeFileSync("output.min.js.map", result.map);
+```
+
+Always check `result.error` before using `result.code`. Unlike UglifyJS v2, v3 never throws — errors are returned in the result object.
+
+## npm scripts
+
+Call `uglifyjs` directly from `package.json` for straightforward single-file builds:
+
+```json
+{
+  "scripts": {
+    "build": "uglifyjs src/app.js -c -m -o dist/app.min.js --source-map url='app.min.js.map'"
+  }
+}
+```
+
+Run with:
+
+```bash
+npm run build
+```
+
+For multi-file builds or conditional logic, move the minification step into a small Node.js script and call that from `package.json`.
+
+## Webpack
+
+Webpack's default minifier for production builds is [terser-webpack-plugin](https://github.com/webpack-contrib/terser-webpack-plugin), which wraps [Terser](https://github.com/terser/terser) — UglifyJS's ES6+ fork. If your codebase is already ES5 and you want to use UglifyJS directly, use [uglify-webpack-plugin](https://github.com/webpack-contrib/uglify-webpack-plugin) instead.
+
+<Tabs>
+  <Tab title="CLI">
+    ```bash
+    npm install --save-dev uglify-webpack-plugin
+    ```
+  </Tab>
+  <Tab title="webpack.config.js">
+    ```javascript
+    var UglifyJsPlugin = require("uglify-webpack-plugin");
+
+    module.exports = {
+        mode: "production",
+        optimization: {
+            minimizer: [
+                new UglifyJsPlugin({
+                    uglifyOptions: {
+                        compress: { drop_console: true },
+                        mangle: true
+                    }
+                })
+            ]
+        }
+    };
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+For most modern projects targeting ES6+, prefer `terser-webpack-plugin` over `uglify-webpack-plugin`. UglifyJS does not parse ES6 module syntax (`import`/`export`) unless you pass the `--module` flag.
+</Tip>
+
+## Gulp
+
+[gulp-uglify](https://github.com/terinjokes/gulp-uglify) wraps UglifyJS and integrates with Gulp's stream-based pipeline.
+
+<Tabs>
+  <Tab title="CLI">
+    ```bash
+    npm install --save-dev gulp gulp-uglify
+    ```
+  </Tab>
+  <Tab title="gulpfile.js">
+    ```javascript
+    var gulp = require("gulp");
+    var uglify = require("gulp-uglify");
+
+    gulp.task("minify", function() {
+        return gulp.src("src/**/*.js")
+            .pipe(uglify({
+                compress: { drop_console: true },
+                mangle: true
+            }))
+            .pipe(gulp.dest("dist"));
+    });
+    ```
+  </Tab>
+</Tabs>
+
+To include source maps in a Gulp pipeline, add [gulp-sourcemaps](https://github.com/gulp-sourcemaps/gulp-sourcemaps):
+
+```javascript
+var sourcemaps = require("gulp-sourcemaps");
+
+gulp.task("minify", function() {
+    return gulp.src("src/**/*.js")
+        .pipe(sourcemaps.init())
+        .pipe(uglify())
+        .pipe(sourcemaps.write("."))
+        .pipe(gulp.dest("dist"));
+});
+```
+
+## Rollup
+
+For ES5 output from Rollup, use [rollup-plugin-uglify](https://github.com/TrySound/rollup-plugin-uglify). For ES6+ output, use [@rollup/plugin-terser](https://github.com/rollup/plugins/tree/master/packages/terser).
+
+<Tabs>
+  <Tab title="CLI">
+    ```bash
+    npm install --save-dev rollup rollup-plugin-uglify
+    ```
+  </Tab>
+  <Tab title="rollup.config.js">
+    ```javascript
+    var { uglify } = require("rollup-plugin-uglify");
+
+    module.exports = {
+        input: "src/index.js",
+        output: {
+            file: "dist/bundle.min.js",
+            format: "iife"
+        },
+        plugins: [
+            uglify({
+                compress: { passes: 2 },
+                mangle: { toplevel: true }
+            })
+        ]
+    };
+    ```
+  </Tab>
+</Tabs>
+
+## Processing ES modules
+
+UglifyJS can process ES modules when you pass the `--module` flag on the CLI or set `module: true` in `minify()` options. This enables implicit `"use strict"` and support for top-level `await`.
+
+<Tabs>
+  <Tab title="CLI">
+    ```bash
+    uglifyjs --module src/index.mjs -c -m -o dist/index.min.mjs
+    ```
+  </Tab>
+  <Tab title="API">
+    ```javascript
+    var result = UglifyJS.minify(code, {
+        module: true,
+        compress: true,
+        mangle: true
+    });
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+UglifyJS supports most ECMAScript features but does not handle every exotic syntax. If you encounter parse errors on valid modern JavaScript, run the code through Babel with an appropriate preset before passing it to UglifyJS.
+</Warning>

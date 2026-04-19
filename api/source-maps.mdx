@@ -1,0 +1,151 @@
+---
+title: "Source maps with the UglifyJS Node.js API"
+description: "How to generate, compose, and inline source maps with minify(), including all sourceMap option fields and practical code examples."
+---
+
+UglifyJS can generate a source map alongside minified output, making it possible to debug compressed code against the original source. Source maps are enabled by passing a `sourceMap` object to `minify()`. The source map string is returned in `result.map` — it is never automatically written to disk. You control how it is saved and referenced.
+
+## Enabling source maps
+
+Pass any `sourceMap` object (even an empty one) to activate source map generation.
+
+```javascript
+var UglifyJS = require("uglify-js");
+
+var result = UglifyJS.minify({"file1.js": "var a = function() {};"}, {
+    sourceMap: {
+        filename: "out.js",
+        url: "out.js.map"
+    }
+});
+console.log(result.code); // minified output with sourceMappingURL comment
+console.log(result.map);  // source map JSON string
+```
+
+<Note>
+  `result.map` is a string, not an object. It is not saved to disk. Write it manually with `fs.writeFileSync` or pipe it to your build tool.
+</Note>
+
+## `sourceMap` options
+
+<ParamField body="filename" type="string | null" default="null">
+  Sets the `file` attribute in the source map, which identifies the output JavaScript file the source map describes. This value does not affect where any files are written — it is metadata only.
+
+  ```javascript
+  sourceMap: { filename: "out.js" }
+  ```
+</ParamField>
+
+<ParamField body="url" type="string | null" default="null">
+  When set, appends a `//# sourceMappingURL=<url>` comment to `result.code`. Set to `"inline"` to embed the source map as a base64 data URI directly in `result.code` instead of a separate file. If omitted, UglifyJS assumes HTTP `X-SourceMap` headers are used and adds no comment.
+
+  ```javascript
+  sourceMap: { url: "out.js.map" }      // external reference
+  sourceMap: { url: "inline" }          // embedded base64 data URI
+  ```
+</ParamField>
+
+<ParamField body="root" type="string | null" default="null">
+  Sets the `sourceRoot` field in the source map. This is prepended to each source path in the map and is commonly used to point to the base URL where original sources are hosted.
+
+  ```javascript
+  sourceMap: { root: "http://example.com/src" }
+  ```
+</ParamField>
+
+<ParamField body="content" type="string | object | null" default="null">
+  An input source map to compose with the output source map. Use this when your input JavaScript was itself generated from another source (e.g., compiled TypeScript or CoffeeScript). Pass the source map as a parsed object, a JSON string, or `"inline"` to read an inline source map from the input.
+</ParamField>
+
+<ParamField body="includeSources" type="boolean" default="false">
+  When `true`, the original source file contents are embedded in the source map under `sourcesContent`. This makes the source map self-contained, useful for environments where original sources are not hosted publicly.
+</ParamField>
+
+<ParamField body="names" type="boolean" default="true">
+  When `true`, symbol names are included in the source map for better debugger display. Set to `false` to reduce the source map file size at the cost of less precise name mapping in debuggers.
+</ParamField>
+
+## Examples
+
+### Basic source map generation
+
+Generate a source map and save it alongside the minified file.
+
+```javascript
+var fs = require("fs");
+var UglifyJS = require("uglify-js");
+
+var result = UglifyJS.minify({"file1.js": "var a = function() {};"}, {
+    sourceMap: {
+        filename: "out.js",
+        url: "out.js.map"
+    }
+});
+
+fs.writeFileSync("out.js", result.code, "utf8");
+fs.writeFileSync("out.js.map", result.map, "utf8");
+```
+
+### Setting `sourceRoot`
+
+Point the source map's `sourceRoot` to the original source location on your server.
+
+```javascript
+var result = UglifyJS.minify({"file1.js": "var a = function() {};"}, {
+    sourceMap: {
+        root: "http://example.com/src",
+        url: "out.js.map"
+    }
+});
+```
+
+### Composed source map
+
+When minifying code that was compiled from another language (e.g., TypeScript → JavaScript → minified), use `content` to pass the intermediate source map. UglifyJS produces a composed map that links minified output back to the original source.
+
+```javascript
+var result = UglifyJS.minify({"compiled.js": compiledCode}, {
+    sourceMap: {
+        content: fs.readFileSync("compiled.js.map", "utf8"),
+        url: "minified.js.map"
+    }
+});
+// result.map maps minified.js back to the original pre-compilation source
+```
+
+Pass `content: "inline"` if the input source map is embedded inside the source file as a data URI comment.
+
+### Inline source map
+
+Embed the source map directly in the output file as a base64-encoded data URI. No separate `.map` file is needed.
+
+```javascript
+var result = UglifyJS.minify({"file1.js": "var a = function() {};"}, {
+    sourceMap: {
+        url: "inline"
+    }
+});
+console.log(result.code);
+// minified code...
+// //# sourceMappingURL=data:application/json;charset=utf-8;base64,...
+```
+
+`result.map` is still populated as a string when `url: "inline"` is used.
+
+### Reducing source map size
+
+Omit symbol names from the source map to reduce its file size. Debugging will still show correct line and column positions, but variable names will not be mapped.
+
+```javascript
+var result = UglifyJS.minify({"file1.js": "var longVariableName = 1;"}, {
+    sourceMap: {
+        filename: "out.js",
+        url: "out.js.map",
+        names: false
+    }
+});
+```
+
+<Tip>
+  For the best source map debugging experience, disable `compress` and use only `mangle`. Many compression transforms (dead code elimination, inlining, sequence joining) restructure code in ways that make source positions impossible to preserve accurately.
+</Tip>

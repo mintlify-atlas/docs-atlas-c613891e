@@ -1,97 +1,84 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "UglifyJS: JavaScript minifier and compressor"
+description: "UglifyJS is a fast JavaScript parser, minifier, compressor, and beautifier toolkit. Reduce JS bundle sizes with dead code elimination and name mangling."
 ---
 
-## Setting up
+UglifyJS is a battle-tested JavaScript toolkit that parses, compresses, mangles, and beautifies JavaScript code. Used by millions of projects worldwide, it reduces bundle sizes through dead code elimination, variable name mangling, and dozens of configurable compression optimizations — available as both a CLI tool and Node.js library.
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install UglifyJS globally or as a project dependency via npm
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Minify your first JavaScript file in under 2 minutes
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="CLI Reference" icon="terminal" href="/cli/overview">
+    Explore all command-line flags for compress, mangle, and output
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Node.js API" icon="code" href="/api/minify">
+    Use UglifyJS programmatically with the `minify()` function
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What UglifyJS does
 
-Everything you need to create world-class documentation.
+UglifyJS applies multiple transformation passes to your JavaScript to produce the smallest possible output:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+<CardGroup cols={2}>
+  <Card title="Compression" icon="compress" href="/cli/compress">
+    Dead code removal, constant folding, function inlining, and 50+ other optimizations
   </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
+  <Card title="Mangling" icon="shuffle" href="/cli/mangle">
+    Rename variables and properties to short names to reduce output size
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
+  <Card title="Source Maps" icon="map" href="/cli/source-maps">
+    Generate source maps so minified code stays debuggable
   </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
+  <Card title="Beautifier" icon="paintbrush" href="/cli/output">
+    Pretty-print JavaScript for readability when needed
   </Card>
-</Columns>
+</CardGroup>
 
-## Need inspiration?
+## Quick example
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+```bash
+# Install globally
+npm install uglify-js -g
+
+# Minify a file with compression and mangling
+uglifyjs input.js -c -m -o output.min.js
+```
+
+```javascript
+// Programmatic usage
+var UglifyJS = require("uglify-js");
+
+var result = UglifyJS.minify("function add(first, second) { return first + second; }");
+console.log(result.code);
+// function add(n,d){return n+d}
+```
+
+<Steps>
+  <Step title="Install UglifyJS">
+    Install via npm: `npm install uglify-js -g` for CLI use, or `npm install uglify-js` for programmatic use in your project.
+  </Step>
+  <Step title="Minify your JavaScript">
+    Run `uglifyjs input.js -c -m -o output.min.js` to compress and mangle a file, or use the Node.js API for build tool integration.
+  </Step>
+  <Step title="Configure options">
+    Tune compression aggressiveness, preserve specific variable names, generate source maps, and more using the extensive options system.
+  </Step>
+  <Step title="Integrate into your build">
+    Add UglifyJS to webpack, Rollup, Gulp, or any build pipeline using the programmatic API or available plugins.
+  </Step>
+</Steps>
+
+## Key features
+
+- **50+ compress optimizations** — dead code removal, constant folding, inline expansion, and more
+- **Variable and property mangling** — shorten identifiers to single characters for maximum compression
+- **Source map support** — generate and compose source maps for debugging minified code
+- **ES module support** — process modern ES modules with top-level `await`
+- **Conditional compilation** — use `global_defs` to strip debug code at build time
+- **Name cache** — maintain consistent mangled names across multiple build passes
+- **SpiderMonkey AST interop** — accept input from Acorn and other parsers

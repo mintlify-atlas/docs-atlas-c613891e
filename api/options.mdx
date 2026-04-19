@@ -1,0 +1,141 @@
+---
+title: "minify() options structure reference"
+description: "Every top-level option accepted by minify(), with types, defaults, and links to detailed sub-option references for compress, mangle, output, and parse."
+---
+
+Every behavior of `minify()` is controlled through a single options object. Top-level keys act as shorthand switches — for example, setting `ie: true` automatically propagates the IE workaround flag into `compress`, `mangle`, and `output` without requiring you to repeat it in each sub-object. Sub-option objects like `compress` and `mangle` accept their own detailed configuration; those are documented on their respective reference pages.
+
+## Full options structure
+
+```javascript
+{
+    parse: {
+        // parse options
+    },
+    compress: {
+        // compress options
+    },
+    mangle: {
+        // mangle options
+
+        properties: {
+            // mangle property options
+        }
+    },
+    output: {
+        // output options
+    },
+    sourceMap: {
+        // source map options
+    },
+    nameCache: null, // or specify a name cache object
+    toplevel: false,
+    warnings: false,
+}
+```
+
+## Top-level options
+
+<ParamField body="annotations" type="boolean">
+  Pass `false` to ignore all comment annotations (`/*@__PURE__*/` or `/*#__PURE__*/`) and elide them from output. Pass `true` to both compress and retain comment annotations in the output, allowing further processing downstream. When `undefined` (the default), annotations are honored by the compressor but stripped from output.
+</ParamField>
+
+<ParamField body="compress" type="boolean | object" default="{}">
+  Pass `false` to skip the compression phase entirely — useful for faster builds where you only need whitespace removal and mangling. Pass an object to configure individual [compress options](/options/compress). The default `{}` enables all compress defaults.
+</ParamField>
+
+<ParamField body="expression" type="boolean" default="false">
+  Parse the input as a single expression rather than a program. Useful for minifying JSON or bookmarklet-style code.
+</ParamField>
+
+<ParamField body="ie" type="boolean" default="false">
+  Enable workarounds for Internet Explorer bugs. Equivalent to setting `ie: true` inside `compress`, `mangle`, and `output` individually.
+</ParamField>
+
+<ParamField body="keep_fargs" type="boolean" default="false">
+  Pass `true` to prevent discarding or mangling of function arguments. Useful for code that relies on `Function.prototype.length` or reads `arguments` dynamically.
+</ParamField>
+
+<ParamField body="keep_fnames" type="boolean" default="false">
+  Pass `true` to prevent discarding or mangling of function names. Useful for code that relies on `Function.prototype.name`, such as Angular dependency injection or stack-trace-based debugging.
+</ParamField>
+
+<ParamField body="mangle" type="boolean | object" default="true">
+  Pass `false` to skip name mangling entirely. Pass an object to configure individual [mangle options](/options/mangle). When `true`, uses all mangle defaults.
+
+  <Expandable title="mangle.properties">
+    <ParamField body="mangle.properties" type="boolean | object" default="false">
+      A subcategory of the mangle option. Pass an object to enable and configure property name mangling. See [mangle properties options](/options/mangle) for the full list.
+
+      <Warning>
+        Property mangling will likely break your code if applied without care. It mangles all property names not in the DOM properties exclusion list. Use `reserved` and `regex` to restrict which properties are mangled.
+      </Warning>
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="module" type="boolean">
+  Process input as an ES module, enabling implicit `"use strict"` and support for top-level `await`. When explicitly set, also enables `toplevel`. Defaults to `true` unless `ie: true` is set, in which case it defaults to `false`.
+</ParamField>
+
+<ParamField body="nameCache" type="object | null" default="null">
+  Pass an empty object `{}` or a previously populated cache object to persist mangled variable and property names across multiple `minify()` calls. `minify()` reads from and writes to this object during minification, so you can serialize it to disk and reuse it across builds.
+
+  ```javascript
+  var cache = {};
+  UglifyJS.minify(file1, { nameCache: cache, mangle: { toplevel: true } });
+  UglifyJS.minify(file2, { nameCache: cache, mangle: { toplevel: true } });
+  // file2 sees the same mangled names as file1
+  ```
+</ParamField>
+
+<ParamField body="output" type="object | null" default="null">
+  Pass an object to configure [output options](/options/output) such as `beautify`, `comments`, `preamble`, `quote_style`, and more. The defaults are optimized for smallest output size.
+</ParamField>
+
+<ParamField body="parse" type="object" default="{}">
+  Pass an object to configure [parse options](/options/parse) such as `bare_returns`, `html5_comments`, and `module`.
+</ParamField>
+
+<ParamField body="sourceMap" type="boolean | object" default="false">
+  Pass an object to enable source map generation and configure source map options. See [source maps](/api/source-maps) for the full option list and examples.
+</ParamField>
+
+<ParamField body="toplevel" type="boolean" default="false">
+  Set to `true` to enable mangling and dropping of top-level variable and function names. When `module` is set, this defaults to `true` automatically.
+
+  ```javascript
+  // Without toplevel: the `add` function name is preserved
+  // With toplevel: unused top-level identifiers are dropped
+  var result = UglifyJS.minify(code, { toplevel: true });
+  ```
+</ParamField>
+
+<ParamField body="v8" type="boolean" default="false">
+  Enable workarounds for V8/Chrome/Node.js engine bugs. Equivalent to setting `v8: true` inside `mangle` and `output` individually.
+</ParamField>
+
+<ParamField body="warnings" type="boolean | string" default="false">
+  Pass `true` to collect compressor warnings in `result.warnings`. Pass `"verbose"` for more detailed diagnostic output. Warnings are only populated in the return value when this option is enabled.
+</ParamField>
+
+<ParamField body="webkit" type="boolean" default="false">
+  Enable workarounds for Safari/WebKit bugs. Equivalent to setting `webkit: true` inside `compress`, `mangle`, and `output` individually. PhantomJS users should set this to `true`.
+</ParamField>
+
+## Further reading
+
+<CardGroup cols={2}>
+  <Card title="Compress options" icon="compress" href="/options/compress">
+    All options for the compression phase, including dead code removal, inlining, and constant folding.
+  </Card>
+  <Card title="Mangle options" icon="shuffle" href="/options/mangle">
+    Options for variable and property name mangling, including reserved names and regex filters.
+  </Card>
+  <Card title="Output options" icon="file-output" href="/options/output">
+    Options for the code generator: beautify, comments, quote style, and more.
+  </Card>
+  <Card title="Parse options" icon="code" href="/options/parse">
+    Options for the parser: bare returns, ES module mode, and HTML comment handling.
+  </Card>
+</CardGroup>

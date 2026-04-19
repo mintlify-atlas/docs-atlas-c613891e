@@ -1,0 +1,43 @@
+---
+title: "What is UglifyJS?"
+description: "UglifyJS is a JavaScript parser, minifier, compressor, and beautifier toolkit for reducing bundle sizes. Use it via CLI or the Node.js API."
+---
+
+UglifyJS is a JavaScript parser, minifier, compressor, and beautifier toolkit. It takes JavaScript source code and produces smaller, functionally equivalent output by applying dead code elimination, variable name mangling, constant folding, and dozens of other configurable transformations. You can run it from the command line against individual files, pipe it into a build system, or call it programmatically as a Node.js library — making it a flexible choice for any JavaScript optimization workflow.
+
+## What UglifyJS does
+
+UglifyJS works in four main stages, each independently configurable:
+
+- **Parse** — reads JavaScript source into an internal AST.
+- **Compress** — applies over 50 code transformations: dead code removal, function inlining, constant evaluation, and more.
+- **Mangle** — renames local variables and function parameters to short names (e.g., `firstLongName` → `a`) to cut output size.
+- **Beautify / output** — serialises the AST back to JavaScript, either minified or pretty-printed.
+
+Compression and mangling are enabled by default when you call `minify()`. You can disable either pass independently, or tune them with fine-grained options.
+
+## Key use cases
+
+- **Reducing bundle size** — stripping whitespace and mangling names alone accounts for roughly 95% of typical size reduction, letting you optionally skip the slower compress pass for faster builds.
+- **Build pipelines** — integrate via the Node.js API into webpack, Rollup, Gulp, or any custom build script.
+- **Conditional compilation** — use `global_defs` to define constants such as `DEBUG=false`, causing UglifyJS to eliminate the corresponding dead branches at build time.
+- **Source map generation** — produce or compose source maps so minified code remains debuggable.
+
+## Supported JavaScript
+
+UglifyJS supports ES5 and most ECMAScript language features including arrow functions, `async`/`await`, destructuring, template literals, and ES modules. For exotic or cutting-edge syntax that UglifyJS does not yet handle, run your source through a transpiler such as [Babel](https://babeljs.io/) first, then pass the transpiled output to UglifyJS.
+
+## UglifyJS v3 vs v2
+
+`uglify-js@3` introduced a simplified API and CLI that is **not backwards compatible** with `uglify-js@2`. The `minify()` function in v3 no longer throws errors on failure — it returns them in `result.error` instead. If you are migrating from v2, review the API reference before updating.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install UglifyJS globally for CLI use or locally as a project dependency.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Minify your first JavaScript file in under two minutes.
+  </Card>
+</CardGroup>

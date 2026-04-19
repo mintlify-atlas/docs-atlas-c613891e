@@ -1,0 +1,58 @@
+---
+title: "Parse options reference"
+description: "Configure how UglifyJS parses your JavaScript source before compression, including ES module mode, shebang support, and top-level return handling."
+---
+
+The parse stage is UglifyJS's first pass over your source code. Before any compression or mangling takes place, the parser reads your JavaScript and builds an internal AST. These four options let you tell the parser about non-standard syntax it would otherwise reject, or browser compatibility shims you want it to process.
+
+You pass parse options through the `parse` key of `minify()`, or via the `--parse` flag on the CLI.
+
+```javascript
+UglifyJS.minify(code, {
+  parse: {
+    bare_returns: false,
+    html5_comments: true,
+    module: false,
+    shebang: true,
+  }
+});
+```
+
+---
+
+<ParamField path="bare_returns" type="boolean" default="false">
+  Allow `return` statements at the top level of the file, outside of any function body. Normally a top-level `return` is a syntax error; enabling this option makes the parser accept it.
+
+  This is useful when minifying CommonJS modules or userscripts that are meant to be wrapped in an anonymous function (IIFE) by the host environment at runtime — for example, `.user.js` files executed by a browser extension that wraps the script automatically.
+
+  ```javascript
+  // Valid when bare_returns: true
+  var result = compute();
+  return result;
+  ```
+</ParamField>
+
+<ParamField path="html5_comments" type="boolean" default="true">
+  Process `<!-- … -->` HTML comment syntax as line comments. This is a legacy workaround from the era when browsers that did not understand `<script>` tags would render the script source as visible page text; wrapping script content in an HTML comment prevented that.
+
+  When this option is `true`, UglifyJS treats `<!--` as the start of a line comment (equivalent to `//`) and `-->` at the start of a line as another line comment. Disable it if you know your source does not contain HTML comment shims and you want strict parsing.
+</ParamField>
+
+<ParamField path="module" type="boolean" default="false">
+  Parse the file as an ES module rather than a classic script. Setting this to `true` enables two things:
+
+  - An implicit `"use strict"` directive for the entire file — you do not need to write it yourself.
+  - Support for top-level `await` expressions.
+
+  When you pass `module: true` at the top-level `minify()` options, that flag is forwarded automatically to the parse stage. Explicitly setting `parse.module` is only necessary when you need fine-grained control over parse versus compress behaviour.
+
+  <Note>
+    Setting `module: true` at the top-level `minify()` call also implies `toplevel: true`, enabling top-level scope mangling and dead-code elimination for unused exports.
+  </Note>
+</ParamField>
+
+<ParamField path="shebang" type="boolean" default="true">
+  Preserve a `#!` interpreter directive on the very first line of a file (also called a shebang or hashbang). This allows UglifyJS to process Node.js CLI scripts and other executable scripts that begin with a line like `#!/usr/bin/env node` without treating the `#` as a syntax error.
+
+  When enabled, the shebang line is stripped from the AST during parsing and re-emitted verbatim at the top of the output. Disable this option only if you are certain the input contains no shebang and you want the parser to reject `#` characters at position zero.
+</ParamField>

@@ -1,0 +1,432 @@
+---
+title: "Compress options reference"
+description: "Every compress option for UglifyJS, controlling dead-code elimination, inlining, constant folding, unsafe transforms, and dozens of other optimizations."
+---
+
+The compressor is the heart of UglifyJS. It performs a series of AST-level transformations — constant folding, dead-code elimination, inlining, sequence joining, and more — to produce the smallest semantically equivalent output possible. You enable compression by passing a `compress` object to `minify()`, or the `-c` / `--compress` flag on the CLI.
+
+```javascript
+UglifyJS.minify(code, {
+  compress: {
+    passes: 2,
+    drop_console: true,
+    toplevel: true,
+  }
+});
+```
+
+All options listed below default to `true` unless marked otherwise. Options that default to `false` are either unsafe, rarely beneficial, or disabled because they increase output size in typical code.
+
+---
+
+<ParamField path="annotations" type="boolean" default="true">
+  Respect `/*@__PURE__*/` and `/*#__PURE__*/` comment annotations on function calls. When a call is marked pure and its return value is unused, UglifyJS will drop it entirely. Pass `false` to disable this behaviour — useful when upstream tooling has incorrectly annotated calls as pure.
+
+  ```javascript
+  /*@__PURE__*/sideEffectFree();  // dropped when unused
+  ```
+</ParamField>
+
+<ParamField path="arguments" type="boolean" default="true">
+  Replace `arguments[index]` expressions with the corresponding named parameter whenever it is safe to do so. For example, `arguments[0]` inside `function f(a)` becomes `a`.
+</ParamField>
+
+<ParamField path="arrows" type="boolean" default="true">
+  Apply optimizations specific to arrow functions, such as simplifying their bodies when the result is predictable.
+</ParamField>
+
+<ParamField path="assignments" type="boolean" default="true">
+  Optimize assignment expressions. This includes collapsing compound assignments and removing assignments whose value is immediately discarded.
+</ParamField>
+
+<ParamField path="awaits" type="boolean" default="true">
+  Apply optimizations to `await` expressions inside async functions where the result can be simplified.
+</ParamField>
+
+<ParamField path="booleans" type="boolean" default="true">
+  Optimize boolean contexts. For example, `!!a ? b : c` becomes `a ? b : c`, and `true === x` may be rewritten to drop the explicit `true`.
+</ParamField>
+
+<ParamField path="collapse_vars" type="boolean" default="true">
+  Collapse single-use `var` / `let` / `const` declarations into their use site when doing so does not produce side effects. This reduces the number of variable bindings and often enables further optimizations downstream.
+
+  ```javascript
+  // Before
+  var x = a + b;
+  return x;
+
+  // After
+  return a + b;
+  ```
+</ParamField>
+
+<ParamField path="comparisons" type="boolean" default="true">
+  Apply algebraic transformations to binary comparisons. Examples include:
+
+  - `!(a <= b)` → `a > b`
+  - `a = !b && !c && !d` → `a = !(b || c || d)`
+
+  These rewrites shorten the output and may also unlock further optimizations.
+</ParamField>
+
+<ParamField path="conditionals" type="boolean" default="true">
+  Optimize `if` statements and conditional (`? :`) expressions. This includes collapsing branches with identical results, converting `if/else` to ternary form, and eliminating always-taken or never-taken branches.
+</ParamField>
+
+<ParamField path="dead_code" type="boolean" default="true">
+  Remove code that can never be reached. Common examples are statements after an unconditional `return`, `throw`, or `break`, and branches of an `if` whose condition is statically known.
+</ParamField>
+
+<ParamField path="default_values" type="boolean" default="true">
+  Drop default parameter values that are shadowed or otherwise overridden before first use.
+</ParamField>
+
+<ParamField path="directives" type="boolean" default="true">
+  Remove duplicate `"use strict"` directives and any non-standard directives that UglifyJS does not recognize and that serve no purpose in the output.
+</ParamField>
+
+<ParamField path="drop_console" type="boolean" default="false">
+  Drop all calls to `console.*` methods. This is a blunt instrument — it removes the entire call including any arguments that might have side effects. If you need to drop only specific methods (e.g. `console.info`) while retaining argument side effects, use `pure_funcs` instead.
+</ParamField>
+
+<ParamField path="drop_debugger" type="boolean" default="true">
+  Remove `debugger;` statements from the output. These are no-ops in production and add bytes for no benefit.
+</ParamField>
+
+<ParamField path="evaluate" type="boolean | string | number" default="true">
+  Evaluate expressions that have a statically determinable value and replace them with their result.
+
+  - `true` — evaluate expressions when the replacement is shorter.
+  - `"eager"` — always replace function calls with their evaluated result whenever possible, regardless of size.
+  - A positive integer — set an upper bound (in characters) on the size of any individual evaluated result.
+
+  ```javascript
+  // Before
+  var x = 2 + 3;
+
+  // After (evaluate: true)
+  var x = 5;
+  ```
+</ParamField>
+
+<ParamField path="expression" type="boolean" default="false">
+  Pass `true` to preserve completion values from terminal statements when there is no explicit `return`. This is useful for bookmarklets that rely on the final expression value of a script.
+</ParamField>
+
+<ParamField path="functions" type="boolean" default="true">
+  Convert `var` declarations that are immediately assigned a function expression into `function` declarations wherever safe, enabling further hoisting and inlining optimizations.
+</ParamField>
+
+<ParamField path="global_defs" type="object" default="{}">
+  Define global constants for conditional compilation. UglifyJS treats each key as a globally constant identifier and replaces references to it with the supplied value, then dead-code eliminates unreachable branches.
+
+  ```javascript
+  UglifyJS.minify(code, {
+    compress: {
+      global_defs: {
+        DEBUG: false,
+        "env.PROD": true,
+      }
+    }
+  });
+  ```
+
+  Prefix a key with `"@"` to parse the value as an expression rather than a string literal:
+
+  ```javascript
+  global_defs: {
+    "@alert": "console.log"
+  }
+  // alert('hi') → console.log('hi')
+  ```
+</ParamField>
+
+<ParamField path="hoist_exports" type="boolean" default="true">
+  Move `export` statements to the top of the module to make them visible earlier in the analysis pipeline, enabling more aggressive compression and mangling of exported names.
+</ParamField>
+
+<ParamField path="hoist_funs" type="boolean" default="false">
+  Hoist function declarations to the top of their enclosing scope. Disabled by default because it can increase output size in typical code, but may help when combined with other passes.
+</ParamField>
+
+<ParamField path="hoist_props" type="boolean" default="true">
+  Hoist property reads from constant object and array literals into regular variables when the object is used only for its properties. This allows the object to be eliminated entirely.
+
+  ```javascript
+  // Before
+  var o = { p: 1, q: 2 };
+  f(o.p, o.q);
+
+  // After
+  f(1, 2);
+  ```
+
+  <Tip>
+    `hoist_props` is most effective when combined with `toplevel: true`, `mangle: true`, and `passes: 2` or higher.
+  </Tip>
+</ParamField>
+
+<ParamField path="hoist_vars" type="boolean" default="false">
+  Hoist all `var` declarations to the top of their function scope. Disabled by default because it tends to increase output size in practice.
+</ParamField>
+
+<ParamField path="if_return" type="boolean" default="true">
+  Optimize `if` statements that end with `return` or `continue`. This includes merging the consequent with the following statement and converting patterns like `if (x) return a; return b;` into `return x ? a : b`.
+</ParamField>
+
+<ParamField path="imports" type="boolean" default="true">
+  Drop unreferenced `import` bindings when `unused` is also enabled. If an imported symbol is never used in the module, its binding (but not necessarily the side-effect-bearing module itself) is removed.
+</ParamField>
+
+<ParamField path="inline" type="boolean | number" default="true">
+  Inline calls to functions that contain a simple `return` statement. The value controls how aggressively inlining is applied:
+
+  | Value | Behaviour |
+  |-------|-----------|
+  | `false` / `0` | Disable inlining |
+  | `1` | Inline simple functions (no arguments) |
+  | `2` | Inline functions with arguments |
+  | `3` | Inline functions with arguments and local variables |
+  | `4` / `true` | Inline functions with arguments, variables, and statements |
+</ParamField>
+
+<ParamField path="join_vars" type="boolean" default="true">
+  Merge consecutive `var`, `let`, or `const` declarations into a single statement using the comma operator.
+
+  ```javascript
+  // Before
+  var a = 1;
+  var b = 2;
+
+  // After
+  var a = 1, b = 2;
+  ```
+</ParamField>
+
+<ParamField path="keep_fargs" type="boolean" default="false">
+  By default, UglifyJS drops unused trailing function arguments. Pass `true` to retain all function arguments, which is necessary when your code inspects `Function.prototype.length` at runtime.
+</ParamField>
+
+<ParamField path="keep_infinity" type="boolean" default="false">
+  Prevent `Infinity` from being rewritten as `1/0`. The two are semantically equivalent, but `1/0` is shorter. Enable this option if you target Chrome/V8, where `1/0` may be slightly slower in certain engine optimisation paths.
+</ParamField>
+
+<ParamField path="loops" type="boolean" default="true">
+  Optimize `do`, `while`, and `for` loops whose condition can be statically determined. This includes removing loops that never execute and converting single-iteration loops into straight-line code.
+</ParamField>
+
+<ParamField path="merge_vars" type="boolean" default="true">
+  Combine variables that hold the same value and reuse a single binding, reducing the number of declarations in the output.
+</ParamField>
+
+<ParamField path="module" type="boolean" default="false">
+  Treat the input as an ES module. This implies an implicit `"use strict"` for the entire file and enables module-specific optimisations. Mirror this setting in the `parse` options when using the API directly.
+</ParamField>
+
+<ParamField path="negate_iife" type="boolean" default="true">
+  Negate Immediately-Invoked Function Expressions (IIFEs) whose return value is unused. This avoids the parentheses that the code generator would otherwise insert to disambiguate function expressions from declarations.
+
+  ```javascript
+  // Before (code generator would emit parentheses)
+  (function() { … })();
+
+  // After (negation removes the need)
+  !function() { … }();
+  ```
+
+  <Note>
+    If you use `output.wrap_iife: true`, consider disabling `negate_iife` so that IIFEs remain wrapped in parentheses as expected.
+  </Note>
+</ParamField>
+
+<ParamField path="objects" type="boolean" default="true">
+  Compact object literals by merging duplicate keys and removing unreachable properties.
+</ParamField>
+
+<ParamField path="passes" type="number" default="1">
+  The maximum number of compression passes to run. Each additional pass gives the compressor another opportunity to find optimizations revealed by the previous pass. Two passes commonly yield meaningfully smaller output; beyond three the gains are usually negligible.
+
+  ```javascript
+  compress: { passes: 2 }
+  ```
+
+  <Warning>
+    Each additional pass proportionally increases compression time.
+  </Warning>
+</ParamField>
+
+<ParamField path="properties" type="boolean" default="true">
+  Rewrite bracket-notation property access to dot notation whenever the property name is a valid identifier.
+
+  ```javascript
+  foo["bar"]  →  foo.bar
+  ```
+</ParamField>
+
+<ParamField path="pure_funcs" type="array | null" default="null">
+  An array of function names that UglifyJS should treat as free of side effects. When a call to one of these functions is the only use of its return value, the entire call expression (including arguments) can be dropped.
+
+  ```javascript
+  compress: {
+    pure_funcs: ["Math.floor", "console.log"]
+  }
+  ```
+
+  <Warning>
+    UglifyJS does not verify that the name has not been redefined in an inner scope. Add any names listed here to `mangle.reserved` to prevent them from being mangled to a different identifier.
+  </Warning>
+</ParamField>
+
+<ParamField path="pure_getters" type="boolean | string" default='"strict"'>
+  Control whether UglifyJS may drop or reorder property access expressions (e.g. `foo.bar` or `arr[42]`).
+
+  - `false` — never drop property accesses; they are assumed to have side effects.
+  - `"strict"` — drop or reorder `foo.bar` only when `foo` is known not to be `null` or `undefined`.
+  - `true` — assume all property accesses are side-effect-free and may be freely dropped or reordered.
+</ParamField>
+
+<ParamField path="reduce_funcs" type="boolean" default="true">
+  Allow single-use functions to be inlined as function expressions where it is safe to do so, enabling further optimization passes on the inlined body. This depends on `reduce_vars` being enabled.
+
+  <Note>
+    Some code runs faster in Chrome's V8 engine with this option disabled. If you are specifically targeting V8 performance, benchmark with and without this option.
+  </Note>
+</ParamField>
+
+<ParamField path="reduce_vars" type="boolean" default="true">
+  Track variables that are assigned once and used only as constants. This unlocks further constant-folding and inlining optimizations throughout the compression pipeline.
+</ParamField>
+
+<ParamField path="rests" type="boolean" default="true">
+  Optimize rest parameters (`...args`) where the collected array is used in predictable ways.
+</ParamField>
+
+<ParamField path="sequences" type="boolean | number" default="true">
+  Join consecutive simple statements using the comma operator to form sequence expressions. This is one of the most effective size-reduction techniques for minified code.
+
+  - `true` — enable with a default limit of 200 comma sequences per expression.
+  - A positive integer — set a custom maximum number of comma sequences. Values of `20` or fewer are recommended if you experience very slow compression times on large files.
+  - `false` / `0` — disable entirely.
+
+  ```javascript
+  // Before
+  a = 1;
+  b = 2;
+  return c;
+
+  // After
+  return a = 1, b = 2, c;
+  ```
+</ParamField>
+
+<ParamField path="side_effects" type="boolean" default="true">
+  Drop code that provably has no effect on program output — for example, a standalone expression statement whose value is unused and whose evaluation cannot throw or mutate state.
+</ParamField>
+
+<ParamField path="spreads" type="boolean" default="true">
+  Flatten spread expressions (`...arr`) when the array contents are statically known, replacing the spread with individual elements.
+</ParamField>
+
+<ParamField path="strings" type="boolean" default="true">
+  Compact string concatenations. Adjacent string literals are merged at compile time, and concatenation with empty strings is eliminated.
+</ParamField>
+
+<ParamField path="switches" type="boolean" default="true">
+  Optimize `switch` statements by removing unreachable branches, de-duplicating identical cases, and converting simple switches to equivalent `if`/`else` chains when shorter.
+</ParamField>
+
+<ParamField path="templates" type="boolean" default="true">
+  Compact template literals. Embedded expressions are inlined where possible, and template literals that reduce to plain strings are converted to string literals.
+
+  ```javascript
+  `foo ${42}`  →  "foo 42"
+  ```
+</ParamField>
+
+<ParamField path="top_retain" type="string | array | RegExp | function | null" default="null">
+  Prevent specific top-level functions or variables from being removed by `unused`. Accepts a comma-separated string, an array of names, a `RegExp`, or a predicate function. Setting this option implies `toplevel: true`.
+
+  ```javascript
+  compress: {
+    top_retain: ["init", "teardown"]
+  }
+  ```
+</ParamField>
+
+<ParamField path="toplevel" type="boolean | string" default="false">
+  Drop unreferenced functions and variables in the top-level scope.
+
+  - `false` — do not touch top-level bindings (default, safe for scripts loaded in a shared global scope).
+  - `true` — drop both unreferenced functions and variables.
+  - `"funcs"` — drop only unreferenced function declarations.
+  - `"vars"` — drop only unreferenced variable declarations.
+
+  <Tip>
+    Enable `toplevel` when bundling self-contained modules or when you control the entire global scope.
+  </Tip>
+</ParamField>
+
+<ParamField path="typeofs" type="boolean" default="true">
+  Simplify `typeof` comparisons against string literals.
+
+  ```javascript
+  typeof foo == "undefined"  →  void 0 === foo
+  ```
+</ParamField>
+
+<ParamField path="unsafe" type="boolean" default="false">
+  Enable a set of transformations that are safe for most code but may break unusual patterns that rely on specific runtime behaviour. These include:
+
+  | Before | After |
+  |--------|-------|
+  | `new Array(1, 2, 3)` or `Array(1, 2, 3)` | `[1, 2, 3]` |
+  | `new Object()` | `{}` |
+  | `String(exp)` or `exp.toString()` | `"" + exp` |
+  | `new Object(...)` / `new RegExp(...)` / `new Function(...)` / `new Error(...)` / `new Array(...)` | Discard the `new` operator |
+
+  These transforms are correct for the vast majority of codebases. The edge cases where they are not safe involve overriding `Array`, `Object`, or other built-in constructors, or relying on the identity of the constructed object.
+
+  <Warning>
+    Test your build thoroughly after enabling `unsafe`. The name is accurate — these transforms can silently change behaviour in code that depends on constructor identity or prototype chains.
+  </Warning>
+</ParamField>
+
+<ParamField path="unsafe_comps" type="boolean" default="false">
+  Assume that operands in numeric comparisons (e.g. `a <= b`) can never coerce to `NaN`, and that `in` / `instanceof` expressions never throw. This enables additional algebraic rewrites of comparison chains.
+</ParamField>
+
+<ParamField path="unsafe_Function" type="boolean" default="false">
+  Compress and mangle `Function(args, code)` calls when both arguments are string literals. This allows the dynamically-constructed function to be analysed and minified as normal code.
+</ParamField>
+
+<ParamField path="unsafe_math" type="boolean" default="false">
+  Apply algebraic simplifications to numeric expressions. For example, `2 * x * 3` becomes `6 * x`. These rewrites are mathematically correct for integers but may produce different floating-point results for certain inputs due to IEEE 754 rounding.
+</ParamField>
+
+<ParamField path="unsafe_proto" type="boolean" default="false">
+  Rewrite `Array.prototype.slice.call(a)` to `[].slice.call(a)` and similar `ClassName.prototype.method.call(instance)` patterns to `[].method.call(instance)`. Shorter output, but assumes the prototype has not been modified.
+</ParamField>
+
+<ParamField path="unsafe_regexp" type="boolean" default="false">
+  Treat variables that are assigned a `RegExp` literal and never reassigned as constants, enabling the same substitution and inlining optimizations applied to numeric and string constants.
+</ParamField>
+
+<ParamField path="unsafe_undefined" type="boolean" default="false">
+  Substitute `void 0` when a variable named `undefined` is in scope. Because `undefined` is not a reserved word it can be shadowed; this option assumes it has not been and allows the mangler to replace it with the shorter `void 0`.
+</ParamField>
+
+<ParamField path="unused" type="boolean | string" default="true">
+  Drop unreferenced functions and variables.
+
+  - `true` — drop all unreferenced bindings.
+  - `"keep_assign"` — keep bindings that appear on the left-hand side of an assignment even if their assigned value is never read.
+  - `false` — disable.
+</ParamField>
+
+<ParamField path="varify" type="boolean" default="true">
+  Convert block-scoped `let` and `const` declarations to `var` whenever the conversion is semantically safe — that is, when the variable does not cross a block boundary that would change its temporal-dead-zone or closure behaviour. Reduces output size and can enable further optimizations that `var` hoisting makes possible.
+</ParamField>
+
+<ParamField path="yields" type="boolean" default="true">
+  Apply optimizations to `yield` expressions inside generator functions where the yielded value or control flow can be simplified.
+</ParamField>

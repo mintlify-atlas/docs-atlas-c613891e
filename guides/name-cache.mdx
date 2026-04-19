@@ -1,0 +1,127 @@
+---
+title: "Consistent mangling across builds with name cache"
+description: "Keep mangled variable and property names in sync when you compress multiple files in separate UglifyJS calls using the name cache feature."
+---
+
+When you compress several JavaScript files in a single UglifyJS call, the mangler assigns names consistently because it sees all scopes at once. When you compress files in separate calls — for example, splitting a bundle into parts or building incrementally — the mangler starts fresh each time and may assign different short names to the same symbol. The name cache solves this by persisting the name mapping between calls so that all output files agree on the same mangled identifiers.
+
+## When you need it
+
+You need the name cache whenever:
+
+- Files in separate bundles call functions or reference variables defined in other bundles.
+- You run UglifyJS in multiple steps across a CI pipeline.
+- You process vendor and application code separately but want them to interoperate.
+
+If all files are compressed in a single `uglifyjs` call or a single `UglifyJS.minify()` call, the name cache is not needed.
+
+## CLI approach
+
+Pass `--name-cache` with a path to a JSON file. UglifyJS reads the cache before mangling and writes updated mappings back when it finishes. Delete the file to start fresh.
+
+```bash
+rm -f /tmp/cache.json
+uglifyjs file1.js file2.js --mangle-props --name-cache /tmp/cache.json -o part1.js
+uglifyjs file3.js file4.js --mangle-props --name-cache /tmp/cache.json -o part2.js
+```
+
+After both commands run, `part1.js` and `part2.js` use identical mangled names for any shared symbols. The cache file must exist and be valid JSON before the second call; starting from an absent file on the first call is fine because UglifyJS creates it.
+
+## API approach
+
+Pass a `nameCache` object in your options. UglifyJS treats it as a read/write store: it reads existing mappings from the object and writes new ones back into it after each call. Reuse the same object across calls to accumulate the full mapping.
+
+```javascript
+var UglifyJS = require("uglify-js");
+
+var options = {
+    mangle: { toplevel: true },
+    nameCache: {}
+};
+
+var result1 = UglifyJS.minify({ "file1.js": "function add(first, second) { return first + second; }" }, options);
+var result2 = UglifyJS.minify({ "file2.js": "console.log(add(1 + 2, 3 + 4));" }, options);
+
+if (result1.error) throw result1.error;
+if (result2.error) throw result2.error;
+```
+
+Because `options.nameCache` is mutated in place, `result2` sees the mangled name that was assigned to `add` during `result1` and produces consistent output.
+
+## Persisting the cache to disk
+
+To share the cache across separate Node.js processes or CI runs, read the cache from disk before minifying and write it back after:
+
+```javascript
+var UglifyJS = require("uglify-js");
+var fs = require("fs");
+
+var cacheFileName = "/tmp/cache.json";
+
+// Load existing cache or start fresh
+var nameCache = {};
+try {
+    nameCache = JSON.parse(fs.readFileSync(cacheFileName, "utf8"));
+} catch (e) {
+    // File doesn't exist yet — start with an empty cache
+}
+
+var options = {
+    mangle: { properties: true },
+    nameCache: nameCache
+};
+
+fs.writeFileSync("part1.js", UglifyJS.minify({
+    "file1.js": fs.readFileSync("file1.js", "utf8"),
+    "file2.js": fs.readFileSync("file2.js", "utf8")
+}, options).code, "utf8");
+
+fs.writeFileSync("part2.js", UglifyJS.minify({
+    "file3.js": fs.readFileSync("file3.js", "utf8"),
+    "file4.js": fs.readFileSync("file4.js", "utf8")
+}, options).code, "utf8");
+
+// Persist updated cache for the next build
+fs.writeFileSync(cacheFileName, JSON.stringify(options.nameCache), "utf8");
+```
+
+<Tip>
+Commit the cache file to version control if your CI pipeline runs UglifyJS in separate jobs. This ensures reproducible output and avoids name conflicts between builds.
+</Tip>
+
+## Cache file format
+
+The cache file is a plain JSON object with two top-level keys: `vars` for variable name mappings and `props` for property name mappings. You do not need to construct or interpret this format manually; UglifyJS manages it entirely.
+
+```json
+{
+  "vars": { "props": { "$add$": "n" } },
+  "props": { "props": { "$myProp$": "a" } }
+}
+```
+
+<Warning>
+The cache format is an implementation detail and may change between major versions. Do not rely on specific key names inside the cache object.
+</Warning>
+
+## Using the name cache with `--mangle-props`
+
+Property mangling requires the name cache most urgently because property names cross file boundaries wherever shared objects are accessed. The CLI example above shows the typical pattern: compress related files together in a single call, then move to the next batch.
+
+```bash
+rm -f /tmp/cache.json
+
+# First batch: vendor code
+uglifyjs vendor/lib1.js vendor/lib2.js \
+  --mangle-props regex=/_$/ \
+  --name-cache /tmp/cache.json \
+  -c -m -o dist/vendor.min.js
+
+# Second batch: application code that calls into vendor
+uglifyjs src/app.js src/utils.js \
+  --mangle-props regex=/_$/ \
+  --name-cache /tmp/cache.json \
+  -c -m -o dist/app.min.js
+```
+
+Both output files now use the same mangled names for any property matching `/_$/`.

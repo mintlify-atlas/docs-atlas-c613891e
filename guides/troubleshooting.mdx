@@ -1,0 +1,221 @@
+---
+title: "Troubleshooting common UglifyJS issues"
+description: "Diagnose and fix the most frequent problems with UglifyJS: broken mangling, property mangle side effects, browser compatibility, and slow builds."
+---
+
+Most UglifyJS problems fall into a small number of categories: names that should not have been mangled, property mangling that broke object access, output that misbehaves in a specific browser, or a build that takes too long. This guide covers each category with concrete steps to identify and fix the issue.
+
+<AccordionGroup>
+
+  <Accordion title="Code broken after mangling">
+    Variable name mangling renames identifiers to short single-character names. Code breaks when a name that must stay stable — for example, a framework-reserved global, an export used by a separate bundle, or a string-based lookup — is renamed without the caller knowing.
+
+    **Fix: use `reserved` to protect names.**
+
+    ```bash
+    uglifyjs app.js -m reserved=['$','require','exports'] -o app.min.js
+    ```
+
+    ```javascript
+    UglifyJS.minify(code, {
+        mangle: {
+            reserved: ["$", "require", "exports", "define"]
+        }
+    });
+    ```
+
+    Common names to protect:
+
+    - AMD/CommonJS: `require`, `exports`, `module`, `define`
+    - jQuery: `$`, `jQuery`
+    - Angular: names referenced by string in dependency injection
+    - Any name accessed with `eval` or constructed dynamically at runtime
+
+    If you are unsure which name is causing the breakage, temporarily disable mangling (`-m false` or `mangle: false`) and confirm the code works. Then re-enable mangling with progressively fewer reserved names until the issue reappears.
+  </Accordion>
+
+  <Accordion title="--mangle-props breaks code">
+    Property mangling is aggressive by default. It renames every property that is not a built-in DOM property or standard JavaScript API. Any property accessed by string (e.g. `obj["myProp"]`) or passed through external code that UglifyJS did not see will break.
+
+    **Recommended approach: target only your own naming conventions.**
+
+    Use `regex` to restrict mangling to properties matching a pattern you control, such as properties ending with an underscore:
+
+    ```bash
+    uglifyjs app.js -c -m --mangle-props regex=/_$/
+    ```
+
+    Use `reserved` to explicitly protect names that must not change:
+
+    ```bash
+    uglifyjs app.js -c -m --mangle-props reserved=[publicMethod,anotherPublic]
+    ```
+
+    Use `keep_quoted` to opt out specific properties by quoting them in the source:
+
+    ```bash
+    uglifyjs app.js -c -m --mangle-props keep_quoted
+    ```
+
+    With `keep_quoted`, writing `obj["stableProperty"]` in your source guarantees that `stableProperty` is never mangled, even when accessed later as `obj.stableProperty`.
+  </Accordion>
+
+  <Accordion title="Identifying mangling issues with debug mode">
+    Before running full property mangling on a large codebase, use debug mode to produce readable output that still reveals which properties were renamed. Debug mode appends `_$` prefix and `$_` suffix around the original name.
+
+    ```bash
+    uglifyjs app.js -c -m --mangle-props debug -o app.debug.js
+    ```
+
+    The property `o.foo` becomes `o._$foo$_` in the output. You can load the debug build, exercise the code, and observe which renamed properties cause errors.
+
+    You can also pass a custom suffix to track changes across builds:
+
+    ```bash
+    uglifyjs app.js --mangle-props debug=XYZ -c -m
+    ```
+
+    This produces `o._$fooXYZ_` instead, which helps identify how a particular property was mangled when comparing outputs from different builds.
+  </Accordion>
+
+  <Accordion title="Internet Explorer compatibility">
+    UglifyJS does not add IE workarounds by default. Pass the `--ie` flag to enable them:
+
+    ```bash
+    uglifyjs app.js -c -m --ie -o app.min.js
+    ```
+
+    Equivalently, in the API:
+
+    ```javascript
+    UglifyJS.minify(code, { ie: true });
+    ```
+
+    This sets `ie: true` for the `compress`, `mangle`, and `output` phases simultaneously. Without this flag, UglifyJS may produce output that throws errors or behaves incorrectly on IE due to differences in identifier parsing, `with` statement handling, and other legacy quirks.
+  </Accordion>
+
+  <Accordion title="Safari/WebKit compatibility">
+    Pass `--webkit` to enable workarounds for known Safari and WebKit engine bugs:
+
+    ```bash
+    uglifyjs app.js --webkit -c -m -o app.min.js
+    ```
+
+    ```javascript
+    UglifyJS.minify(code, { webkit: true });
+    ```
+
+    PhantomJS users should always set this option. WebKit-specific issues include problems with certain destructuring patterns and edge cases in `typeof` handling.
+  </Accordion>
+
+  <Accordion title="Chrome or Node.js compatibility">
+    Pass `--v8` to enable workarounds for bugs specific to the V8 engine (Chrome and Node.js):
+
+    ```bash
+    uglifyjs app.js --v8 -c -m -o app.min.js
+    ```
+
+    ```javascript
+    UglifyJS.minify(code, { v8: true });
+    ```
+
+    This affects the `mangle` and `output` phases. V8-specific issues are rare in modern versions of Chrome and Node.js but can appear when targeting older runtime versions.
+  </Accordion>
+
+  <Accordion title="UglifyJS not throwing on errors">
+    UglifyJS v3 does not throw exceptions. All errors are returned in `result.error`. If you forget to check this field, silent failures produce undefined or empty output.
+
+    Always check the error field before using the result:
+
+    ```javascript
+    var result = UglifyJS.minify(code, options);
+    if (result.error) throw result.error;
+    // safe to use result.code here
+    ```
+
+    The error object includes `message`, `filename`, `line`, `col`, and `pos` fields for parse errors. For runtime errors in the UglifyJS internals, the error is a standard `Error` instance.
+
+    To get a stack trace from the thrown error during development, wrap the throw in a new `Error`:
+
+    ```javascript
+    if (result.error) {
+        var err = new Error(result.error.message);
+        err.uglifyError = result.error;
+        throw err;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Source maps are inaccurate after compression">
+    Compression transforms — inlining, dead code removal, sequence merging — rearrange and delete code in ways that make source map mappings imprecise. This is expected behaviour: the source no longer exists, so there is no accurate mapping for it.
+
+    For the highest fidelity source maps during debugging, disable compression and use mangle only:
+
+    ```bash
+    uglifyjs app.js -m --source-map url='app.min.js.map' -o app.min.js
+    ```
+
+    ```javascript
+    UglifyJS.minify(code, {
+        compress: false,
+        mangle: true,
+        sourceMap: { url: "app.min.js.map" }
+    });
+    ```
+
+    This still reduces file size significantly through name mangling while keeping source positions accurate.
+  </Accordion>
+
+  <Accordion title="Slow compression">
+    The compressor accounts for most of UglifyJS's runtime. Whitespace removal and symbol mangling together recover about 95% of the size reduction that full compression provides, in a fraction of the time.
+
+    Benchmark for `d3.js`:
+
+    | Mode | Minified size | Time |
+    |------|-------------|------|
+    | mangle=false, compress=false | 363,988 bytes | 0.56s |
+    | mangle=true, compress=false | 253,305 bytes | 0.99s |
+    | mangle=true, compress=true | 244,436 bytes | 5.30s |
+
+    To enable fast minify mode, skip the compressor entirely:
+
+    ```bash
+    uglifyjs app.js -m -o app.min.js
+    ```
+
+    ```javascript
+    UglifyJS.minify(code, { compress: false, mangle: true });
+    ```
+
+    If you need compression but it is slow on a specific file, reduce the `sequences` limit. The default value of `200` can cause very long compress times on dense code:
+
+    ```bash
+    uglifyjs app.js -c sequences=20 -m -o app.min.js
+    ```
+  </Accordion>
+
+  <Accordion title="Compiler assumptions">
+    UglifyJS makes several assumptions to enable safe optimizations. Code that violates these assumptions may produce incorrect output after compression:
+
+    - **`.toString()` and `.valueOf()` have no side effects** and have not been overridden on built-in objects.
+    - **`undefined`, `NaN`, and `Infinity` have not been redefined** in any outer scope.
+    - **`arguments.callee`, `arguments.caller`, and `Function.prototype.caller`** are not used.
+    - **`Function.prototype.toString()` and `Error.prototype.stack`** do not need to contain any specific content.
+    - **Object property access does not trigger side effects** via `.watch()` or `Proxy`.
+    - **Object properties can be freely added, removed, or modified** — they are not frozen, sealed, or defined with `Object.defineProperty()`.
+    - When `toplevel` is enabled, **global variables are not aliased** through the global object (e.g. `window.myVar`).
+
+    If your code relies on any of these behaviours, the relevant compress options must be disabled individually or compression must be turned off entirely.
+  </Accordion>
+
+  <Accordion title="Reporting a bug">
+    Set the `UGLIFY_BUG_REPORT=1` environment variable before running UglifyJS to generate a reproducible test case. UglifyJS will write a self-contained file to the current directory that includes the input code and the options used.
+
+    ```bash
+    UGLIFY_BUG_REPORT=1 uglifyjs app.js -c -m -o app.min.js
+    ```
+
+    Attach the generated file when opening an issue at [github.com/mishoo/UglifyJS](https://github.com/mishoo/UglifyJS/issues). Include the UglifyJS version (`uglifyjs --version`), the Node.js version (`node --version`), and a description of the expected versus actual behaviour.
+  </Accordion>
+
+</AccordionGroup>

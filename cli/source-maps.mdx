@@ -1,0 +1,147 @@
+---
+title: "Generate source maps with UglifyJS CLI"
+description: "How to generate, configure, and compose source maps with the UglifyJS CLI, including inline maps and multi-step compilation chains."
+---
+
+Source maps connect minified output back to the original source code, making it possible to set breakpoints, read stack traces, and debug in browser developer tools as if the code were never minified. UglifyJS generates source maps that conform to the [Source Map Specification](https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k).
+
+## Basic usage
+
+Pass `--source-map` together with `-o` to write a source map alongside the output file. The map file is written to `<output>.map` automatically:
+
+```bash
+uglifyjs input.js -o output.js --source-map
+# Writes output.js and output.js.map
+```
+
+<Note>
+You must specify an output file with `-o` when using `--source-map`. Writing a source map to STDOUT is not supported (except with `url=inline`).
+</Note>
+
+## Source map options
+
+Options are passed as a comma-separated list inside quotes after `--source-map`.
+
+### `filename`
+
+Sets the `file` attribute in the source map, which records the name of the generated file the map corresponds to. This does not affect where the map is written on disk.
+
+```bash
+uglifyjs input.js -o output.js \
+  --source-map "filename='output.js'"
+```
+
+### `root`
+
+The URL where the original source files can be found. Stored as `sourceRoot` in the source map. Relative paths in the map are resolved against this root.
+
+```bash
+uglifyjs input.js -o output.js \
+  --source-map "root='http://example.com/src'"
+```
+
+### `url`
+
+The path where the source map can be found at runtime. UglifyJS appends `//# sourceMappingURL=<url>` to the generated code. Without this option, UglifyJS assumes the HTTP `X-SourceMap` header is used and omits the directive.
+
+```bash
+uglifyjs input.js -o output.js \
+  --source-map "url='output.js.map'"
+```
+
+### `names`
+
+Default: `true`. Set to `false` to omit symbol names from the source map. This reduces map file size at the cost of less precise variable name information in debuggers.
+
+```bash
+uglifyjs input.js -o output.js \
+  --source-map "names=false,url='output.js.map'"
+```
+
+### `includeSources`
+
+Embeds the content of all source files inside the source map as the `sourcesContent` property. The resulting map is self-contained and does not require the original files to be served separately.
+
+```bash
+uglifyjs input.js -o output.js \
+  --source-map "includeSources,url='output.js.map'"
+```
+
+### `content`
+
+The path to an existing input source map. Used when compressing code that was itself compiled from another language. See [composed source maps](#composed-source-maps) below.
+
+```bash
+uglifyjs compiled.js -o output.js \
+  --source-map "content='compiled.js.map',url='output.js.map'"
+```
+
+### `base`
+
+A filesystem path used to compute relative paths from input files. Useful when input files are in a different directory from where UglifyJS is run.
+
+```bash
+uglifyjs src/file.js -o dist/file.min.js \
+  --source-map "base='src',url='file.min.js.map'"
+```
+
+## Full example
+
+The following command compresses and mangles two files, writes output to `foo.min.js`, writes the source map to `foo.min.js.map`, and sets the source root so the map refers back to the originals on `http://foo.com/src`:
+
+```bash
+uglifyjs js/file1.js js/file2.js \
+         -o foo.min.js -c -m \
+         --source-map "root='http://foo.com/src',url='foo.min.js.map'"
+```
+
+The map lists `http://foo.com/src` as `sourceRoot` and records the original files as `js/file1.js` and `js/file2.js`. In browser developer tools, the resolved source URLs are `http://foo.com/src/js/file1.js` and `http://foo.com/src/js/file2.js`.
+
+## Composed source maps
+
+When compressing JavaScript that was compiled from another language — such as TypeScript, CoffeeScript, or Babel output — you want source maps to point back to the original language source, not to the intermediate compiled JavaScript. UglifyJS supports this through input source maps.
+
+If you already have a source map from `CoffeeScript → compiled JS`, pass it via `content` and UglifyJS will produce a single map from `CoffeeScript → minified JS`:
+
+```bash
+uglifyjs compiled.js -o output.min.js -c -m \
+  --source-map "content='compiled.js.map',url='output.min.js.map'"
+```
+
+If the source map is embedded inline in the compiled file, use `content=inline`:
+
+```bash
+uglifyjs compiled.js -o output.min.js -c -m \
+  --source-map "content=inline,url='output.min.js.map'"
+```
+
+<Note>
+Inline input source maps only work with UglifyJS's built-in parser. They are not supported when using `--parse acorn` or `--parse spidermonkey`.
+</Note>
+
+## Inline source maps
+
+Pass `url=inline` to embed the source map directly in the output file as a base64-encoded data URI. This removes the need to serve a separate `.map` file and is convenient during development.
+
+```bash
+uglifyjs input.js -o output.js -c -m \
+  --source-map "url=inline"
+```
+
+The output file ends with a comment like:
+
+```
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,...
+```
+
+## Source map fidelity and debugging
+
+Compression transforms — inlining, dead code removal, sequence collapsing — rearrange or remove code, which makes it impossible to map every minified token back to a precise original location. For the best source map fidelity when debugging, disable compression and use mangling only:
+
+```bash
+# Best source map accuracy: mangle without compress
+uglifyjs input.js -m -o output.js \
+  --source-map "url='output.js.map'"
+```
+
+This preserves the original code structure while still shortening identifiers, giving debuggers a much more accurate picture of the original source.

@@ -1,0 +1,173 @@
+---
+title: "Output options reference"
+description: "Configure how UglifyJS serializes the AST to JavaScript text: whitespace, quoting, comments, line length, preambles, and browser-compatibility workarounds."
+---
+
+The output stage is UglifyJS's final step: it walks the optimized AST and prints JavaScript text. By default the output is tuned for the smallest possible byte count — no extra whitespace, semicolons used only where required by the grammar, and the shortest quote style for each string. You can override any of this behaviour through the `output` option of `minify()`, or with `-b` / `--beautify` and `-O` / `--output-opts` on the CLI.
+
+```javascript
+UglifyJS.minify(code, {
+  output: {
+    beautify: false,
+    comments: /^!/,
+    preamble: "/* © 2024 Acme Corp */",
+    quote_style: 1,
+  }
+});
+```
+
+---
+
+<ParamField path="annotations" type="boolean" default="false">
+  Retain `/*@__PURE__*/` and `/*#__PURE__*/` comment annotations in the output. These annotations communicate to downstream tools (bundlers, tree-shakers) that the annotated call is side-effect-free and may be dropped if unused.
+
+  Pass `true` when the minified output will be processed again by another tool that honours these annotations. When `false`, annotations are stripped even if the `comments` option would otherwise preserve them.
+</ParamField>
+
+<ParamField path="ascii_only" type="boolean" default="false">
+  Escape all non-ASCII characters in strings and regular expressions using Unicode escape sequences (`\uXXXX`). The output becomes pure ASCII, which is safe to transmit or embed in any ASCII-only context.
+
+  <Note>
+    Enabling this option will invalidate any non-ASCII characters that appear in directive strings such as `"use strict"` with a non-breaking space — those directives would stop being recognized by the runtime. Verify your directives contain only ASCII when using this option.
+  </Note>
+</ParamField>
+
+<ParamField path="beautify" type="boolean" default="false">
+  Emit readable, indented output instead of compact minified code. When you pass `-b` / `--beautify` on the CLI, this is set to `true` automatically. When using the API directly (or `-O`), `beautify` defaults to `false`.
+
+  Enabling `beautify` activates indentation (controlled by `indent_level` and `indent_start`), line-width hints (`width`), and always-braced block bodies (`braces`).
+</ParamField>
+
+<ParamField path="braces" type="boolean" default="false">
+  Always wrap the bodies of `if`, `for`, `do`, `while`, and `with` statements in braces, even when the body is a single statement. This produces more readable (and diff-friendly) beautified output at the cost of a few extra bytes.
+
+  ```javascript
+  // braces: false (default)
+  if (x) return y;
+
+  // braces: true
+  if (x) { return y; }
+  ```
+</ParamField>
+
+<ParamField path="comments" type="boolean | string | RegExp | function" default="false">
+  Control which comments are preserved in the output. The compressor may discard comments attached to eliminated code regardless of this setting.
+
+  | Value | Behaviour |
+  |-------|-----------|
+  | `false` | Drop all comments (default) |
+  | `true` or `"all"` | Preserve every comment |
+  | `"some"` | Preserve multi-line comments containing `@cc_on`, `@license`, or `@preserve` (case-insensitive) |
+  | A RegExp string (e.g. `/^!/`) | Preserve comments whose text matches the expression |
+  | A function `(node, comment) => boolean` | Preserve comments for which the function returns `true` |
+
+  ```javascript
+  // Preserve banner comments starting with !
+  output: { comments: /^!/ }
+
+  // Custom filter function
+  output: {
+    comments: function(node, comment) {
+      return comment.value.indexOf("@license") >= 0;
+    }
+  }
+  ```
+
+  <Note>
+    Comments attached to AST nodes that are removed by dead-code elimination or sequence joining will be lost regardless of the `comments` setting. Place copyright notices on top-level nodes for the best chance of survival.
+  </Note>
+</ParamField>
+
+<ParamField path="extendscript" type="boolean" default="false">
+  Enable workarounds for known bugs in Adobe ExtendScript, the JavaScript engine used in Adobe Creative Suite automation scripts. Enable this only when targeting ExtendScript environments.
+</ParamField>
+
+<ParamField path="galio" type="boolean" default="false">
+  Enable workarounds for known bugs in ANT Galio, a JavaScript runtime used in some test and automation frameworks. Enable this only when targeting Galio environments.
+</ParamField>
+
+<ParamField path="indent_level" type="number | string" default="4">
+  The indentation amount used when `beautify` is enabled. Pass a number to indent by that many spaces, or a string (e.g. `"\t"`) to use an exact whitespace sequence per level.
+
+  ```javascript
+  output: { beautify: true, indent_level: 2 }    // two spaces
+  output: { beautify: true, indent_level: "\t" }  // tabs
+  ```
+</ParamField>
+
+<ParamField path="indent_start" type="number | string" default="0">
+  A fixed prefix applied to every line of output, in the same format as `indent_level`. Use this to embed the minified output inside another indented block while preserving correct relative indentation. Pass `0` (the default) for no prefix.
+</ParamField>
+
+<ParamField path="inline_script" type="boolean" default="true">
+  Escape `</script>` substrings and HTML comment sequences inside JavaScript string literals. This prevents browsers from prematurely terminating a `<script>` block when the minified code is inlined in an HTML page. Disable only when you are certain the output will never be embedded in HTML.
+</ParamField>
+
+<ParamField path="keep_quoted_props" type="boolean" default="false">
+  Prevent UglifyJS from stripping unnecessary quotes from object literal keys. By default, `{ "foo": 1 }` becomes `{foo:1}`. When `keep_quoted_props` is `true`, the quotes are preserved, which is useful when the output will be processed again by a tool that distinguishes quoted from unquoted keys (e.g. when using `--mangle-props keep_quoted`).
+</ParamField>
+
+<ParamField path="max_line_len" type="number | false" default="false">
+  Maximum line length for minified (non-beautified) output. When a line would exceed this length, UglifyJS inserts a newline at a safe boundary. Use this when downstream tooling has hard line-length limits.
+
+  Set to `false` (the default) to disable and allow lines of any length.
+</ParamField>
+
+<ParamField path="preamble" type="string | null" default="null">
+  A string that is prepended verbatim to the very beginning of the output file, before any generated code. It is not parsed or processed in any way. The source map (if generated) is adjusted to account for the preamble's line count.
+
+  The most common use is inserting a copyright or licensing banner:
+
+  ```javascript
+  output: {
+    preamble: "/*! Copyright 2024 Acme Corp. MIT License */"
+  }
+  ```
+</ParamField>
+
+<ParamField path="preserve_line" type="boolean" default="false">
+  Attempt to keep output statements on the same line numbers as their source counterparts. This is a best-effort heuristic — not all statements can be mapped to their original line — but it can improve readability when debugging minified output without a source map.
+</ParamField>
+
+<ParamField path="quote_keys" type="boolean" default="false">
+  Quote all keys in object literals, even those that would be valid unquoted identifiers. Produces output that is always valid JSON-compatible syntax, which may be required by certain parsers or linters.
+</ParamField>
+
+<ParamField path="quote_style" type="number" default="0">
+  The preferred quote character for string literals, including quoted property names and directive strings.
+
+  | Value | Behaviour |
+  |-------|-----------|
+  | `0` | Prefer double quotes; switch to single quotes when the string contains more double-quote characters than single-quote characters. Best for gzip size. |
+  | `1` | Always use single quotes |
+  | `2` | Always use double quotes |
+  | `3` | Always use the same quote character that appeared in the original source |
+</ParamField>
+
+<ParamField path="semicolons" type="boolean" default="true">
+  Separate statements with semicolons. When set to `false`, UglifyJS uses a newline wherever a semicolon is optional according to JavaScript's ASI rules. This can make uglified-but-not-beautified code marginally more readable, and may be slightly smaller before gzip — though the difference after gzip is negligible.
+</ParamField>
+
+<ParamField path="shebang" type="boolean" default="true">
+  Preserve a `#!` shebang line at the top of the output when one was present in the source. Disable only if you are post-processing the output and do not want the shebang forwarded.
+</ParamField>
+
+<ParamField path="width" type="number" default="80">
+  An orientative line-width hint for the beautifier (has no effect when `beautify` is `false`). UglifyJS will attempt to wrap lines at this column, measured from the start of each line's text content (not counting indentation). The hint is approximate — the beautifier will not break tokens to enforce it — but it produces more consistently line-wrapped output.
+</ParamField>
+
+<ParamField path="wrap_iife" type="boolean" default="false">
+  Wrap Immediately-Invoked Function Expressions in an extra pair of parentheses. Some style guides and linters require this form for clarity.
+
+  ```javascript
+  // wrap_iife: false (default)
+  !function() { … }();
+
+  // wrap_iife: true
+  (function() { … })();
+  ```
+
+  <Note>
+    If you enable `wrap_iife`, consider also disabling the `compress.negate_iife` option, which negates IIFEs to avoid the same parentheses that `wrap_iife` re-introduces.
+  </Note>
+</ParamField>

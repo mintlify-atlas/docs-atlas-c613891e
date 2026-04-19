@@ -1,0 +1,108 @@
+---
+title: "CLI compress options (--compress / -c)"
+description: "How to enable and configure the UglifyJS compressor from the CLI using -c. Covers option syntax, fast minify mode, and performance benchmarks."
+---
+
+The UglifyJS compressor applies dozens of AST transformations — dead code removal, constant folding, function inlining, and more — to produce the smallest possible output. Pass `-c` or `--compress` to enable it. Without this flag the compressor is disabled, which is useful when you want faster builds at a small size cost.
+
+## Enabling compression
+
+```bash
+# Enable compressor with default settings
+uglifyjs file.js -c -o file.min.js
+
+# Enable compressor and mangler together
+uglifyjs file.js -c -m -o file.min.js
+```
+
+## Passing options
+
+Options are supplied as a comma-separated list after `-c`. Each option takes the form `foo=bar`. A bare name like `foo` is shorthand for `foo=true`.
+
+```bash
+# Set a single boolean option
+uglifyjs file.js -c toplevel -o file.min.js
+
+# Set multiple options, including disabling sequences
+uglifyjs file.js -c toplevel,sequences=false -o file.min.js
+
+# Specify pure functions for more aggressive removal
+uglifyjs file.js -c "pure_funcs=['Math.floor','console.log']" -o file.min.js
+```
+
+For the complete list of compress options and their defaults, see the [compress options reference](/options/compress).
+
+## Commonly used options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `toplevel` | `false` | Drop unreferenced functions and variables in the top-level scope. Also settable with the `--toplevel` flag. |
+| `passes` | `1` | Number of times to run the compressor. More passes can produce smaller output at the cost of build time. |
+| `sequences` | `true` | Join consecutive statements with the comma operator. Set to `false` or a number to limit sequence length. |
+| `dead_code` | `true` | Remove unreachable code. |
+| `drop_console` | `false` | Remove all `console.*` calls. |
+| `drop_debugger` | `true` | Remove `debugger;` statements. |
+| `pure_funcs` | `null` | List of functions assumed to have no side effects. |
+| `unsafe` | `false` | Enable extra transformations that may break contrived code but are safe for most real-world code. |
+| `global_defs` | `{}` | Define global constants for conditional compilation. See [`--define`](/cli/overview#all-flags). |
+
+## Conditional compilation with `--define`
+
+The `-d` / `--define` flag sets global constants that the compressor treats as known values. Combined with dead code removal, this strips entire branches from the output:
+
+```bash
+uglifyjs app.js -c -d DEBUG=false -o app.min.js
+```
+
+```javascript
+// Input
+if (DEBUG) {
+    console.log("debug stuff");
+}
+
+// Output (DEBUG=false, branch removed)
+```
+
+Nested constants use dot notation:
+
+```bash
+uglifyjs app.js -c -d env.DEBUG=false -o app.min.js
+```
+
+## The `--toplevel` flag
+
+Passing `--toplevel` (or `-c toplevel`) enables the compressor to remove unreferenced functions and variables from the top-level scope. Without it, UglifyJS assumes that top-level names may be accessed by external code.
+
+```bash
+uglifyjs file.js -c toplevel -m -o file.min.js
+```
+
+This is equivalent to passing `{ toplevel: true }` in the API, or to the `--module` flag (which implies `--toplevel`).
+
+## Fast minify mode
+
+Whitespace removal and symbol mangling account for roughly 95% of size reduction in typical JavaScript files. Disabling the compressor and relying only on mangling produces builds that are **3 to 5 times faster** with a modest size increase.
+
+```bash
+# Fast minify: mangle only, skip compression
+uglifyjs file.js -m -o file.min.js
+```
+
+The following table benchmarks UglifyJS against the d3.js library to illustrate the trade-off:
+
+| Configuration | Minified size | Gzip size | Minify time |
+|---|---:|---:|---:|
+| Original source | 511,371 bytes | 119,932 bytes | — |
+| `mangle=false, compress=false` | 363,988 bytes | 95,695 bytes | 0.56s |
+| `mangle=true, compress=false` | 253,305 bytes | 81,281 bytes | 0.99s |
+| `mangle=true, compress=true` | 244,436 bytes | 79,854 bytes | 5.30s |
+
+Mangling alone (`compress=false`) reduces gzip size from 119 KB to 81 KB — within 2 KB of full compression — at one-fifth of the build time. For large codebases or CI pipelines where build speed matters, fast minify mode is the better choice.
+
+<Tip>
+Use `--config-file options.json` to store complex compression configurations in a JSON file and reuse them across projects.
+</Tip>
+
+## Full options reference
+
+For every available compress option with its type, default, and description, see the [compress options reference](/options/compress).

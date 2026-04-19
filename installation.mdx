@@ -1,0 +1,75 @@
+---
+title: "Install UglifyJS via npm"
+description: "Install UglifyJS globally for CLI use or locally as a project dependency. Requires Node.js >= 0.8.0. Verify with uglifyjs --version."
+---
+
+UglifyJS is published on npm as `uglify-js` and works with any Node.js version >= 0.8.0 (as declared in `package.json`). You can install it globally to use the `uglifyjs` command anywhere on your system, or locally inside a project so the version is pinned to your `package.json` and reproducible across machines.
+
+<Steps>
+  <Step title="Choose your install scope">
+    Decide whether you need the `uglifyjs` CLI available system-wide (global) or pinned to a single project (local).
+
+    **Global** — use when you want to run `uglifyjs` from any directory, or for one-off minification tasks.
+
+    **Local** — preferred for projects and CI pipelines, where a pinned version ensures consistent output.
+  </Step>
+
+  <Step title="Install UglifyJS">
+    <CodeGroup>
+
+    ```bash npm (global)
+    npm install uglify-js -g
+    ```
+
+    ```bash npm (local)
+    npm install uglify-js
+    ```
+
+    ```bash yarn (global)
+    yarn global add uglify-js
+    ```
+
+    ```bash yarn (local)
+    yarn add uglify-js
+    ```
+
+    ```bash pnpm (global)
+    pnpm add -g uglify-js
+    ```
+
+    ```bash pnpm (local)
+    pnpm add uglify-js
+    ```
+
+    </CodeGroup>
+
+    For a local install, UglifyJS is added to `node_modules/.bin/uglifyjs`. You can invoke it with `npx uglifyjs` or from an npm script in `package.json`.
+  </Step>
+
+  <Step title="Verify the installation">
+    Run the following command to confirm UglifyJS is installed and check the version:
+
+    ```bash
+    uglifyjs --version
+    ```
+
+    You should see output like `uglify-js 3.19.3`. If you installed locally, use `npx uglifyjs --version` instead.
+  </Step>
+</Steps>
+
+## Global vs local install
+
+| | Global | Local |
+|---|---|---|
+| Run with | `uglifyjs` | `npx uglifyjs` or npm script |
+| Version pinned to project | No | Yes |
+| Works in CI without extra steps | No | Yes |
+| Good for one-off tasks | Yes | No |
+
+<Tip>
+  For build pipelines and team projects, prefer a local install so every developer and CI run uses the same UglifyJS version.
+</Tip>
+
+## Node.js requirement
+
+UglifyJS requires Node.js **>= 0.8.0**. Any modern Node.js LTS release satisfies this. If you are on an old Node.js version and see errors during install, upgrade Node.js first.

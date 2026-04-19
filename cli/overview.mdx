@@ -1,0 +1,128 @@
+---
+title: "UglifyJS CLI: command-line reference"
+description: "Complete reference for the UglifyJS command-line interface — flags for parsing, compression, mangling, output, source maps, and browser compatibility."
+---
+
+The UglifyJS CLI is the fastest way to minify JavaScript without writing any code. Pass one or more input files along with flags to control parsing, compression, mangling, and output behavior. All options that are available through the [Node.js API](/api/minify) are also reachable from the command line.
+
+## Basic syntax
+
+```bash
+uglifyjs [input files] [options]
+```
+
+Pass input files first and options second. When UglifyJS receives multiple input files, it parses them in sequence within the **same global scope** — so a reference in one file to a variable or function declared in another file resolves correctly. If no input file is specified, UglifyJS reads from STDIN.
+
+To pass options before input files, use `--` as a separator so the CLI does not treat filenames as option arguments:
+
+```bash
+uglifyjs --compress --mangle -- input.js
+```
+
+Specify an output file with `-o`. Without it, minified code is written to STDOUT:
+
+```bash
+uglifyjs input.js -c -m -o output.min.js
+```
+
+## All flags
+
+### General
+
+| Flag | Description |
+|------|-------------|
+| `-h, --help` | Print usage information. Use `--help options` to list all available options with their defaults. |
+| `-V, --version` | Print the installed UglifyJS version number. |
+| `-o, --output <file>` | Write output to `<file>` instead of STDOUT. Pass `ast` or `spidermonkey` to write the UglifyJS or SpiderMonkey AST as JSON to STDOUT. |
+| `--config-file <file>` | Read `minify()` options from a JSON file instead of the command line. |
+| `--timings` | Print the time spent in each operation phase to STDERR. |
+| `--verbose` | Print diagnostic messages during processing. |
+| `--warn` | Print warning messages. |
+
+### Parsing
+
+| Flag | Description |
+|------|-------------|
+| `-p, --parse <options>` | Specify parser options. See sub-options below. |
+| `--expression` | Parse a single expression rather than a full program. Useful for parsing JSON. |
+| `--module` | Process input as an ES module. Implies `--toplevel` and enables top-level `await`. |
+| `--no-module` | Disable optimizations that may alter runtime behavior under older JavaScript engines. |
+
+**`--parse` sub-options:**
+
+| Sub-option | Description |
+|------------|-------------|
+| `acorn` | Use the Acorn parser instead of UglifyJS's built-in parser. |
+| `bare_returns` | Allow `return` statements outside of functions. Useful for CommonJS modules or Userscripts that may be wrapped by a caller. |
+| `spidermonkey` | Treat input files as SpiderMonkey AST in JSON format rather than raw JavaScript. |
+
+### Compression
+
+| Flag | Description |
+|------|-------------|
+| `-c, --compress [options]` | Enable the compressor with optional comma-separated options. See [compress options](/cli/compress). |
+| `-d, --define <expr>[=value]` | Declare global constants for conditional compilation (e.g. `--define DEBUG=false`). |
+| `--toplevel` | Compress and mangle variables declared in the top-level scope. |
+| `--annotations` | Process and preserve `/*@__PURE__*/` and `/*#__PURE__*/` comment annotations. |
+| `--no-annotations` | Ignore and discard all comment annotations. |
+
+### Mangling
+
+| Flag | Description |
+|------|-------------|
+| `-m, --mangle [options]` | Enable name mangling with optional comma-separated options. See [mangle options](/cli/mangle). |
+| `--mangle-props [options]` | Mangle property names. See [mangle options](/cli/mangle) for sub-options and caveats. |
+| `--name-cache <file>` | Path to a JSON file used to persist mangled name mappings across multiple UglifyJS runs. |
+| `--keep-fargs` | Do not mangle or drop function arguments. |
+| `--keep-fnames` | Do not mangle or drop function names. Useful for code that relies on `Function.prototype.name`. |
+
+### Output and beautify
+
+| Flag | Description |
+|------|-------------|
+| `-b, --beautify [options]` | Beautify output with optional comma-separated output options. See [output options](/cli/output). |
+| `-O, --output-opts [options]` | Set output options without enabling beautification. |
+| `--comments [filter]` | Preserve copyright comments. Defaults to keeping `@license` and `@preserve` comments. See [output options](/cli/output). |
+
+### Source maps
+
+| Flag | Description |
+|------|-------------|
+| `--source-map [options]` | Generate a source map with optional comma-separated options. See [source map options](/cli/source-maps). |
+
+### Browser compatibility
+
+| Flag | Description |
+|------|-------------|
+| `--ie` | Enable workarounds for non-standard Internet Explorer behavior. Equivalent to setting `ie: true` in `compress`, `mangle`, and `output` options. |
+| `--v8` | Enable workarounds for non-standard Chrome and Node.js behavior. Equivalent to setting `v8: true` in `mangle` and `output` options. |
+| `--webkit` | Enable workarounds for non-standard Safari/WebKit behavior. Equivalent to setting `webkit: true` in `compress`, `mangle`, and `output` options. |
+
+### Wrapping
+
+| Flag | Description |
+|------|-------------|
+| `-e, --enclose [arg[:value]]` | Embed everything in a function with configurable argument(s) and value(s). |
+| `--wrap <name>` | Embed the output in a function that exposes `exports` and `global`. The `<name>` argument is the name the module takes when loaded in a browser. |
+| `--self` | Build UglifyJS itself as a library. Implies `--wrap UglifyJS`. |
+
+## Exit codes
+
+UglifyJS exits with code `0` on success. Any parse error or fatal error exits with code `1`, with the error message written to STDERR.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Compress options" icon="compress" href="/cli/compress">
+    Control dead code removal, inlining, and other compression passes
+  </Card>
+  <Card title="Mangle options" icon="shuffle" href="/cli/mangle">
+    Configure identifier and property name mangling
+  </Card>
+  <Card title="Source maps" icon="map" href="/cli/source-maps">
+    Generate and compose source maps for debugging
+  </Card>
+  <Card title="Output options" icon="file-output" href="/cli/output">
+    Control beautification, comments, and preamble
+  </Card>
+</CardGroup>

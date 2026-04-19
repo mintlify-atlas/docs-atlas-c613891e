@@ -1,0 +1,147 @@
+---
+title: "Conditional compilation with UglifyJS"
+description: "Use global constant definitions to strip environment-specific code at build time, eliminating debug blocks and dead branches from production output."
+---
+
+Conditional compilation lets you declare global constants at build time so that UglifyJS can evaluate branches statically and remove the dead code entirely. A debug block wrapped in `if (DEBUG) { ... }` disappears from production output when you define `DEBUG=false` — no runtime overhead, no stubs, no code.
+
+## Using `--define` on the command line
+
+Pass `--define` (or `-d`) with a name and value. UglifyJS treats the name as a constant in all scopes where it is not redeclared, evaluates any conditional that depends on it, and drops the unreachable branch.
+
+```bash
+uglifyjs app.js --define DEBUG=false -c -o app.min.js
+```
+
+Given this input:
+
+```javascript
+if (DEBUG) {
+    console.log("debug stuff");
+}
+```
+
+The output contains nothing — the entire block is removed.
+
+### Nested constants
+
+Use dot notation to define a property on a namespace object:
+
+```bash
+uglifyjs app.js --define env.DEBUG=false -c -o app.min.js
+```
+
+This replaces all references to `env.DEBUG` with `false` before compression runs.
+
+### Suppressing warnings
+
+UglifyJS emits a warning when a condition is always `false` and unreachable code is dropped. To suppress all compressor warnings, add `warnings=false` to your compress options:
+
+```bash
+uglifyjs app.js --define DEBUG=false -c warnings=false -o app.min.js
+```
+
+## Using a defines file
+
+For larger projects, keep your constants in a dedicated file that is included at the start of the build. Create `build/defines.js`:
+
+```javascript
+var DEBUG = false;
+var PRODUCTION = true;
+```
+
+Then pass it as the first input file:
+
+```bash
+uglifyjs build/defines.js src/app.js src/utils.js -c -o dist/app.min.js
+```
+
+UglifyJS sees the `var` declarations as reducible constants and evaluates every reference to them. Because `var` has function scope, you can also use `const` if you are targeting ES6+ environments.
+
+<Note>
+The build output will still contain the `var DEBUG = false;` declaration unless you also pass `--toplevel`, which enables top-level dead code removal.
+</Note>
+
+## Programmatic API with `global_defs`
+
+When using the Node.js API, set `global_defs` inside the `compress` options:
+
+```javascript
+var UglifyJS = require("uglify-js");
+var fs = require("fs");
+
+var result = UglifyJS.minify(fs.readFileSync("input.js", "utf8"), {
+    compress: {
+        dead_code: true,
+        global_defs: {
+            DEBUG: false
+        }
+    }
+});
+if (result.error) throw result.error;
+fs.writeFileSync("output.min.js", result.code);
+```
+
+`global_defs` accepts any JSON-serialisable value. Boolean and numeric constants are the most common choice because they let the compressor fold conditional expressions at compile time.
+
+## Replacing an identifier with an expression
+
+By default, a `global_defs` value is treated as a literal. To replace an identifier with a reference to another function or expression rather than a string, prefix the key with `@`:
+
+```javascript
+UglifyJS.minify("alert('hello');", {
+    compress: {
+        global_defs: {
+            "@alert": "console.log"
+        }
+    }
+}).code;
+// returns: 'console.log("hello");'
+```
+
+Without the `@` prefix the replacement is treated as a string literal, producing broken output:
+
+```javascript
+UglifyJS.minify("alert('hello');", {
+    compress: {
+        global_defs: {
+            "alert": "console.log"
+        }
+    }
+}).code;
+// returns: '"console.log"("hello");'
+```
+
+<Warning>
+The `@` prefix applies to any key whose value is a valid JavaScript expression. Make sure the expression string parses correctly, or UglifyJS will report a parse error.
+</Warning>
+
+## Combining multiple defines
+
+Pass several `--define` flags on the CLI, or add multiple keys to `global_defs`:
+
+<CodeGroup>
+
+```bash CLI
+uglifyjs app.js \
+  --define DEBUG=false \
+  --define PRODUCTION=true \
+  --define VERSION='"1.2.0"' \
+  -c -m -o app.min.js
+```
+
+```javascript API
+var result = UglifyJS.minify(code, {
+    compress: {
+        global_defs: {
+            DEBUG: false,
+            PRODUCTION: true,
+            VERSION: "1.2.0"
+        }
+    }
+});
+```
+
+</CodeGroup>
+
+String values must be quoted inside the outer quotes on the CLI (`'"1.2.0"'`) so they are parsed as JavaScript string literals rather than bare identifiers.

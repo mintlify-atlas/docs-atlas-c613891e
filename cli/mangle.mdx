@@ -1,0 +1,201 @@
+---
+title: "CLI mangle options (--mangle / -m)"
+description: "Configure UglifyJS identifier and property name mangling from the CLI, including reserved names, regex filters, and the name cache."
+---
+
+Mangling replaces long variable and function names with short ones — typically single characters — to reduce output size without changing program behavior. Pass `-m` or `--mangle` to enable it. Mangling is independent of compression: you can run both together, or use mangling alone for faster builds.
+
+## Enabling mangling
+
+```bash
+# Mangle only (fast minify mode)
+uglifyjs file.js -m -o file.min.js
+
+# Compress and mangle together
+uglifyjs file.js -c -m -o file.min.js
+```
+
+## Mangle options
+
+Options are supplied as a comma-separated list after `-m`.
+
+### `eval`
+
+Default: `false`. When `true`, mangle names that are visible in scopes where `eval` or `with` are used. UglifyJS skips these scopes by default because `eval` can reference any name at runtime.
+
+```bash
+uglifyjs file.js -m eval -o file.min.js
+```
+
+### `reserved`
+
+Default: `[]`. A list of names that must not be mangled. Pass a comma-separated list enclosed in brackets.
+
+```bash
+uglifyjs file.js -m "reserved=['$','require','exports']" -o file.min.js
+```
+
+This prevents `$`, `require`, and `exports` from being renamed, which is important when these identifiers are referenced by code outside the bundle.
+
+### `toplevel`
+
+Default: `false`. When `true`, mangle names declared in the top-level scope. Pair with `--toplevel` compression for maximum size reduction.
+
+```bash
+uglifyjs file.js -c toplevel -m toplevel -o file.min.js
+```
+
+## Property mangling (`--mangle-props`)
+
+<Warning>
+Property mangling will break most code unless you carefully configure it. Properties like method names and object keys that are referenced across file boundaries, in external libraries, or via string access must be excluded. Test thoroughly before using `--mangle-props` in production.
+</Warning>
+
+Property mangling is a separate, more aggressive pass that renames object properties throughout the entire input. Pass `--mangle-props` to enable it. By default, standard JavaScript built-ins and DOM properties are excluded.
+
+```bash
+# Mangle all properties except built-ins
+uglifyjs example.js -c -m --mangle-props -o example.min.js
+```
+
+**Input:**
+```javascript
+var x = {
+    baz_: 0,
+    foo_: 1,
+    calc: function() {
+        return this.foo_ + this.baz_;
+    }
+};
+x.bar_ = 2;
+x["baz_"] = 3;
+console.log(x.calc());
+```
+
+**Output:**
+```javascript
+var x={o:0,_:1,l:function(){return this._+this.o}};x.t=2,x.o=3,console.log(x.l());
+```
+
+### `--mangle-props` sub-options
+
+| Sub-option | Default | Description |
+|------------|---------|-------------|
+| `builtins` | `false` | Allow mangling of built-in JavaScript API property names. Not recommended. |
+| `debug` | `false` | Mangle with the original name still visible (e.g. `foo` → `_$foo$_`). Useful for debugging. |
+| `domprops` | `false` | Allow mangling of property names found in the DOM API. Not recommended. |
+| `globals` | `false` | Mangle properties of global object access (e.g. `self.foo`). |
+| `keep_quoted` | `false` | Only mangle unquoted properties; quoted property names are reserved throughout the script. |
+| `regex` | `null` | Only mangle properties whose names match the given regular expression. |
+| `reserved` | `[]` | List of property names that must not be mangled. |
+
+### Reserving specific properties
+
+```bash
+uglifyjs example.js -c -m --mangle-props "reserved=[foo_,bar_]" -o example.min.js
+```
+
+**Output:** (`foo_` and `bar_` are preserved)
+```javascript
+var x={o:0,foo_:1,_:function(){return this.foo_+this.o}};x.bar_=2,x.o=3,console.log(x._());
+```
+
+### Mangling only matching names
+
+Use `regex` to restrict mangling to property names that match a pattern:
+
+```bash
+# Only mangle properties that end with an underscore
+uglifyjs example.js -c -m --mangle-props regex=/_$/ -o example.min.js
+```
+
+**Output:**
+```javascript
+var x={o:0,_:1,calc:function(){return this._+this.o}};x.l=2,x.o=3,console.log(x.calc());
+```
+
+Combining `regex` and `reserved`:
+
+```bash
+uglifyjs example.js -c -m --mangle-props "regex=/_$/,reserved=[bar_]" -o example.min.js
+```
+
+**Output:**
+```javascript
+var x={o:0,_:1,calc:function(){return this._+this.o}};x.bar_=2,x.o=3,console.log(x.calc());
+```
+
+### Keeping quoted property names (`keep_quoted`)
+
+Using a quoted property name like `o["foo"]` reserves `foo` so it is not mangled anywhere in the script, even when accessed as `o.foo`:
+
+```bash
+uglifyjs stuff.js --mangle-props keep_quoted -c -m -o stuff.min.js
+```
+
+**Input:**
+```javascript
+var o = {
+    "foo": 1,
+    bar: 3,
+};
+o.foo += o.bar;
+console.log(o.foo);
+```
+
+**Output:**
+```javascript
+var o={foo:1,o:3};o.foo+=o.o,console.log(o.foo);
+```
+
+If the output will be processed again by UglifyJS, also pass `-O keep_quoted_props` to retain the quotes:
+
+```bash
+uglifyjs stuff.js --mangle-props keep_quoted -c -m -O keep_quoted_props -o stuff.min.js
+```
+
+**Output:**
+```javascript
+var o={"foo":1,o:3};o.foo+=o.o,console.log(o.foo);
+```
+
+### Debug mangling
+
+Pass `--mangle-props debug` to mangle property names without completely obscuring them. The property `o.foo` becomes `o._$foo$_`, letting you identify which mangled names came from which originals.
+
+```bash
+uglifyjs stuff.js --mangle-props debug -c -m -o stuff.min.js
+```
+
+**Output:**
+```javascript
+var o={_$foo$_:1,_$bar$_:3};o._$foo$_+=o._$bar$_,console.log(o._$foo$_);
+```
+
+Pass a custom suffix to `debug` to make each build distinguishable:
+
+```bash
+uglifyjs stuff.js --mangle-props debug=XYZ -c -m -o stuff.min.js
+# o.foo → o._$foo$XYZ_
+```
+
+## Name cache (`--name-cache`)
+
+When compressing multiple files in separate UglifyJS invocations, the name cache ensures that a property gets mangled to the **same name in every file**. Pass a path to a JSON file (initially empty) and UglifyJS will read and update it on each run.
+
+```bash
+# Start with an empty cache
+rm -f /tmp/cache.json
+
+# First batch
+uglifyjs file1.js file2.js --mangle-props --name-cache /tmp/cache.json -o part1.js
+
+# Second batch (reuses mappings from part1.js)
+uglifyjs file3.js file4.js --mangle-props --name-cache /tmp/cache.json -o part2.js
+```
+
+`part1.js` and `part2.js` will use consistent mangled names. You do not need a name cache when compressing all files in a single UglifyJS call.
+
+## Full options reference
+
+For a complete list of mangle options and their types, see the [mangle options reference](/options/mangle).

@@ -1,0 +1,201 @@
+---
+title: "Mangle options reference"
+description: "Control how UglifyJS renames variables, function parameters, and object properties to produce the shortest possible identifiers in your minified output."
+---
+
+Mangling is the process of renaming identifiers — variables, function parameters, and optionally object properties — to shorter names. It is one of the most effective size-reduction techniques in UglifyJS: on typical JavaScript, mangling alone accounts for a significant share of the bytes saved, even before compression runs.
+
+Enable mangling with `mangle: true` (the default) in `minify()`, or `-m` / `--mangle` on the CLI. Pass an object to configure the behaviour in detail.
+
+```javascript
+UglifyJS.minify(code, {
+  mangle: {
+    toplevel: true,
+    reserved: ["$", "require", "exports"],
+  }
+});
+```
+
+---
+
+## Mangle options
+
+<ParamField path="eval" type="boolean" default="false">
+  Mangle names that are visible in scopes containing `eval` or `with` statements. By default, UglifyJS leaves those scopes untouched because `eval` can reference any in-scope variable by name at runtime, making it impossible to safely rename them. Pass `true` only when you are certain that `eval` will not reference the renamed identifiers.
+</ParamField>
+
+<ParamField path="reserved" type="array" default="[]">
+  An array of identifier names that must not be mangled. Use this to protect names that are referenced from outside the minified bundle — for example, names accessed by third-party scripts, plugin APIs, or `eval` code.
+
+  ```javascript
+  mangle: {
+    reserved: ["$", "require", "exports"]
+  }
+  ```
+
+  On the CLI, pass a comma-separated list:
+
+  ```bash
+  uglifyjs file.js -m reserved=['$','require','exports']
+  ```
+</ParamField>
+
+<ParamField path="toplevel" type="boolean" default="false">
+  Mangle names declared in the top-level scope. By default, top-level identifiers are left unchanged because they may be accessed by other scripts sharing the same global scope. Enable this when the bundle is self-contained and no external code will reference its top-level names by string.
+
+  ```javascript
+  // test.js
+  var globalVar;
+  function funcName(firstLongName, anotherLongName) {
+    var myVariable = firstLongName + anotherLongName;
+  }
+  ```
+
+  ```javascript
+  // mangle.toplevel: false (default)
+  UglifyJS.minify(code).code;
+  // 'function funcName(a,n){}var globalVar;'
+
+  // mangle.toplevel: true
+  UglifyJS.minify(code, { mangle: { toplevel: true } }).code;
+  // 'function n(n,a){}var a;'
+  ```
+</ParamField>
+
+---
+
+## Mangle properties options
+
+Property mangling is a separate, more aggressive step that renames object property names in addition to local variables. It is disabled by default because it **will break most code** unless applied carefully.
+
+Pass a `properties` object inside `mangle` to enable it:
+
+```javascript
+UglifyJS.minify(code, {
+  mangle: {
+    properties: {
+      regex: /_$/,
+      reserved: ["bar_"],
+    }
+  }
+});
+```
+
+Or on the CLI with `--mangle-props`:
+
+```bash
+uglifyjs file.js -c -m --mangle-props regex=/_$/,reserved=[bar_]
+```
+
+<Warning>
+  Property mangling will almost certainly break your code if applied naively. External APIs, serialized JSON keys, and DOM event names must all be explicitly excluded via `reserved` or `regex`. Read each option below carefully before enabling property mangling in production.
+</Warning>
+
+<ParamField path="properties.builtins" type="boolean" default="false">
+  Allow mangling of property names that overlap with built-in JavaScript globals and standard library methods (e.g. `length`, `toString`, `constructor`). Not recommended — overriding this protection is very likely to break your code.
+</ParamField>
+
+<ParamField path="properties.debug" type="boolean | string" default="false">
+  Mangle property names while keeping the original name visible in the output, which makes it easier to trace which property became which mangled name. Pass an empty string `""` to use the default debug format (`_$original$_`), or a non-empty string to use it as a custom suffix.
+
+  ```bash
+  # o.foo → o._$foo$_
+  uglifyjs stuff.js --mangle-props debug -c -m
+  ```
+
+  ```bash
+  # o.foo → o._$fooXYZ_
+  uglifyjs stuff.js --mangle-props debug=XYZ -c -m
+  ```
+
+  Using a random suffix on each build simulates the instability of real mangling and helps surface assumptions about property names early.
+</ParamField>
+
+<ParamField path="properties.domprops" type="boolean" default="false">
+  Allow mangling of property names that appear in the DOM specification (e.g. `innerHTML`, `addEventListener`, `className`). UglifyJS ships with a comprehensive exclusion list in `tools/domprops.json`. Pass `true` only if you are certain none of these names appear in your code.
+</ParamField>
+
+<ParamField path="properties.globals" type="boolean" default="false">
+  Mangle property accesses on the global object alongside undeclared variable references. For example, `self.foo` would be treated the same as the top-level `foo` variable for mangling purposes.
+</ParamField>
+
+<ParamField path="properties.keep_quoted" type="boolean" default="false">
+  Only mangle unquoted property names. When a property name appears in quoted form anywhere in the script (`o["foo"]`), that name is reserved and left unmangled throughout the entire file — including when accessed via dot notation (`o.foo`).
+
+  ```javascript
+  // stuff.js
+  var o = { "foo": 1, bar: 3 };
+  o.foo += o.bar;
+  ```
+
+  ```bash
+  uglifyjs stuff.js --mangle-props keep_quoted -c -m
+  # var o={foo:1,o:3};o.foo+=o.o,console.log(o.foo);
+  # "foo" is preserved; "bar" is mangled to "o"
+  ```
+</ParamField>
+
+<ParamField path="properties.regex" type="RegExp | null" default="null">
+  Only mangle property names that match this regular expression. All property names that do not match are left untouched. This is the safest way to introduce property mangling incrementally — for example, mangling only internal names that follow a naming convention like a trailing underscore.
+
+  ```bash
+  # Mangle only properties ending with _
+  uglifyjs file.js -c -m --mangle-props regex=/_$/
+  ```
+
+  ```javascript
+  mangle: {
+    properties: {
+      regex: /^_/  // mangle properties starting with _
+    }
+  }
+  ```
+</ParamField>
+
+<ParamField path="properties.reserved" type="array" default="[]">
+  A list of property names that must never be mangled, regardless of other settings. Use this to protect names that are part of a public API, accessed from external scripts, or read from serialized data.
+
+  ```bash
+  uglifyjs file.js -c -m --mangle-props reserved=[foo_,bar_]
+  ```
+</ParamField>
+
+---
+
+## Using a name cache
+
+When you compress multiple files in separate `minify()` calls (or separate CLI invocations), you need a shared name cache to ensure the same property or variable gets mangled to the same short name across all files.
+
+```javascript
+var cache = {};
+
+var result1 = UglifyJS.minify({ "file1.js": src1 }, {
+  mangle: { toplevel: true },
+  nameCache: cache,
+});
+
+var result2 = UglifyJS.minify({ "file2.js": src2 }, {
+  mangle: { toplevel: true },
+  nameCache: cache,  // same object — updated in place
+});
+```
+
+You can persist the cache to disk between builds:
+
+```javascript
+var cacheFileName = "/tmp/cache.json";
+var options = {
+  mangle: { properties: true },
+  nameCache: JSON.parse(fs.readFileSync(cacheFileName, "utf8")),
+};
+// … run minify() …
+fs.writeFileSync(cacheFileName, JSON.stringify(options.nameCache), "utf8");
+```
+
+On the CLI, use `--name-cache <file>`:
+
+```bash
+rm -f /tmp/cache.json
+uglifyjs file1.js file2.js --mangle-props --name-cache /tmp/cache.json -o part1.js
+uglifyjs file3.js file4.js --mangle-props --name-cache /tmp/cache.json -o part2.js
+```

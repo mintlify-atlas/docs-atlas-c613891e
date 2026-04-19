@@ -1,0 +1,202 @@
+---
+title: "Working with the UglifyJS AST"
+description: "How to parse code into a native UglifyJS AST, traverse it with TreeWalker, and transform it with TreeTransformer — with real source-backed examples."
+---
+
+UglifyJS uses its own AST format that is distinct from the SpiderMonkey/ESTree format used by tools like Babel and Acorn. The native AST is a tree of typed node objects defined in `lib/ast.js`, each carrying source position tokens and typed properties. You can access this AST directly — either by asking `minify()` to return it, or by passing an existing AST back into `minify()` for compression and mangling.
+
+## Accessing the native AST
+
+To get the raw AST without generating code, disable `compress` and `mangle`, and set `output.ast: true` with `output.code: false`.
+
+```javascript
+var UglifyJS = require("uglify-js");
+
+// Parse only — produce a native UglifyJS AST
+var result = UglifyJS.minify(code, {
+    parse: {},
+    compress: false,
+    mangle: false,
+    output: {
+        ast: true,
+        code: false  // faster when you don't need the string output
+    }
+});
+
+// result.ast contains the native UglifyJS AST
+var ast = result.ast;
+```
+
+## Passing an AST as input
+
+You can pass a previously obtained AST directly as the `files` argument to `minify()`. This lets you parse once and then run multiple compress/mangle passes without re-parsing.
+
+```javascript
+// Accept a native UglifyJS AST as input, then compress and mangle
+var result = UglifyJS.minify(ast, {
+    compress: {},
+    mangle: {},
+    output: {
+        ast: true,
+        code: true
+    }
+});
+
+// result.ast contains the transformed AST
+// result.code contains the minified output string
+```
+
+## Inspecting the AST structure
+
+The `describe_ast()` function in `tools/node.js` prints a human-readable tree of all node types and their properties. Call it at the Node.js REPL or in a script to understand the hierarchy.
+
+```javascript
+var UglifyJS = require("uglify-js");
+console.log(UglifyJS.describe_ast());
+```
+
+This outputs the full class hierarchy starting from `AST_Node`, showing each subclass and its own properties (not inherited ones).
+
+## Key AST node types
+
+UglifyJS defines all node types using `DEFNODE()` in `lib/ast.js`. Every node inherits from `AST_Node` and carries `start` and `end` tokens with source position information.
+
+| Node type | Description |
+|-----------|-------------|
+| `AST_Toplevel` | The root node representing a complete program |
+| `AST_Defun` | A function declaration (`function foo() {}`) |
+| `AST_Function` | A function expression (`var f = function() {}`) |
+| `AST_Arrow` | An arrow function expression (`() => {}`) |
+| `AST_Call` | A function call expression |
+| `AST_Assign` | An assignment expression (`a = b`) |
+| `AST_Binary` | A binary expression (`a + b`) |
+| `AST_Conditional` | A ternary expression (`a ? b : c`) |
+| `AST_Var` / `AST_Let` / `AST_Const` | Variable declarations |
+| `AST_If` | An `if` statement |
+| `AST_For` / `AST_While` / `AST_Do` | Loop statements |
+| `AST_Return` | A `return` statement |
+| `AST_SymbolRef` | A reference to a symbol (not a declaration) |
+| `AST_SymbolVar` | A symbol declared by `var` |
+| `AST_String` | A string literal |
+| `AST_Number` | A numeric literal |
+| `AST_Object` | An object literal |
+| `AST_Array` | An array literal |
+| `AST_Dot` | Dotted property access (`a.b`) |
+| `AST_Sub` | Subscript property access (`a["b"]`) |
+
+## TreeWalker
+
+`TreeWalker` (defined in `lib/ast.js`) traverses the AST depth-first. Construct it with a callback that receives each node. Return a truthy value from the callback to skip descending into a node's children.
+
+```javascript
+var UglifyJS = require("uglify-js");
+
+var result = UglifyJS.minify(code, {
+    compress: false,
+    mangle: false,
+    output: { ast: true, code: false }
+});
+
+var ast = result.ast;
+
+// Collect all function definitions in the AST
+var functions = [];
+ast.walk(new UglifyJS.TreeWalker(function(node) {
+    if (node instanceof UglifyJS.AST_Defun) {
+        functions.push(node.name.name);
+    }
+}));
+console.log(functions);
+```
+
+### TreeWalker methods
+
+The walker maintains a stack as it descends, providing several utility methods inside the callback:
+
+| Method | Description |
+|--------|-------------|
+| `this.parent(n)` | Returns the nth ancestor node (0 = immediate parent) |
+| `this.self()` | Returns the current node |
+| `this.find_parent(type)` | Searches up the stack for the nearest ancestor of a given type |
+| `this.has_directive(type)` | Checks whether a given directive (e.g. `"use strict"`) is in scope |
+| `this.stack` | The raw ancestor stack array |
+
+```javascript
+ast.walk(new UglifyJS.TreeWalker(function(node) {
+    if (node instanceof UglifyJS.AST_SymbolRef) {
+        var parent = this.parent();
+        console.log(node.name, "referenced inside", parent.TYPE);
+    }
+}));
+```
+
+## TreeTransformer
+
+`TreeTransformer` (defined in `lib/transform.js`) extends `TreeWalker` to support AST mutation. It accepts two optional callbacks: `before` (called before descending into children) and `after` (called after). Return a replacement node from either callback to substitute it into the tree. Return `undefined` to proceed with the default traversal.
+
+```javascript
+var UglifyJS = require("uglify-js");
+
+var result = UglifyJS.minify(code, {
+    compress: false,
+    mangle: false,
+    output: { ast: true, code: false }
+});
+
+var ast = result.ast;
+
+// Replace all string literals with their uppercase equivalents
+var transformer = new UglifyJS.TreeTransformer(function before(node) {
+    if (node instanceof UglifyJS.AST_String) {
+        return new UglifyJS.AST_String({
+            value: node.value.toUpperCase(),
+            quote: node.quote
+        });
+    }
+});
+
+var transformed = ast.transform(transformer);
+
+// Generate code from the transformed AST
+var output = UglifyJS.minify(transformed, {
+    compress: false,
+    mangle: false
+});
+console.log(output.code);
+```
+
+### How transform callbacks work
+
+`TreeTransformer` calls `before` for each node before processing its children. If `before` returns a node, that node replaces the original and children are not visited. If `before` returns `undefined`, the transformer descends into children normally, then calls `after` on the way back up.
+
+```javascript
+new UglifyJS.TreeTransformer(
+    function before(node, descend) {
+        // Return a node to replace; return undefined to continue
+    },
+    function after(node) {
+        // Called after children have been transformed
+        // Return a node to replace; return undefined to keep
+    }
+);
+```
+
+## SpiderMonkey / ESTree AST
+
+UglifyJS maintains its own AST format for internal performance and design reasons. However, it includes a converter for SpiderMonkey/ESTree ASTs, enabling interoperability with parsers like Acorn.
+
+From the CLI, use `-p spidermonkey` to tell UglifyJS that input files contain SpiderMonkey AST JSON rather than raw JavaScript:
+
+```bash
+acorn file.js | uglifyjs -p spidermonkey -m -c
+```
+
+You can also use Acorn for parsing via `-p acorn`, which instructs UglifyJS to `require("acorn")` and convert the resulting SpiderMonkey AST internally:
+
+```bash
+uglifyjs file.js -p acorn -m -c
+```
+
+<Note>
+  Acorn parses faster than UglifyJS's built-in parser on large files, but the SpiderMonkey-to-UglifyJS conversion adds overhead. In practice, total time is similar to or slightly more than using UglifyJS's own parser directly.
+</Note>

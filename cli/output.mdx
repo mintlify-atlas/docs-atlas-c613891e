@@ -1,0 +1,134 @@
+---
+title: "CLI output and beautify options"
+description: "Control UglifyJS output format from the CLI: file paths, AST output, beautification, comment preservation, and preamble injection."
+---
+
+By default, UglifyJS writes minified JavaScript to STDOUT. The output flags let you redirect output to a file, enable pretty-printing, preserve specific comments, and prepend a preamble such as a license header. All output behavior is controlled through `-o`, `-b`, `-O`, and `--comments`.
+
+## Specifying an output file
+
+Use `-o` or `--output` to write to a file instead of STDOUT:
+
+```bash
+uglifyjs input.js -c -m -o output.min.js
+```
+
+### AST output
+
+Pass `ast` or `spidermonkey` as the output path to dump the abstract syntax tree as JSON to STDOUT instead of generating code:
+
+```bash
+# UglifyJS native AST
+uglifyjs input.js --output ast
+
+# SpiderMonkey-compatible AST
+uglifyjs input.js --output spidermonkey
+```
+
+AST output is useful for tooling that consumes or inspects the UglifyJS parse tree. The `spidermonkey` format is compatible with tools like Acorn and ESTree-based tools.
+
+## Beautification (`-b` / `--beautify`)
+
+Pass `-b` to pretty-print the output with indentation and line breaks. Beautification is disabled by default because the compressor optimizes for minimum size. Beautified output is useful when you want to inspect the compressed code or generate readable output for debugging.
+
+```bash
+uglifyjs input.js -c -m -b -o output.pretty.js
+```
+
+You can pass output options as a comma-separated list after `-b`:
+
+```bash
+# Indent with 2 spaces, use single quotes
+uglifyjs input.js -b "indent_level=2,quote_style=1" -o output.js
+```
+
+**Common `-b` sub-options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `indent_level` | `4` | Number of spaces per indentation level. Also accepts a whitespace string (e.g. `"\t"` for tabs). |
+| `quote_style` | `0` | Quote style: `0` auto (double, or single when fewer escapes needed), `1` always single, `2` always double, `3` preserve original. |
+| `wrap_iife` | `false` | Wrap immediately invoked function expressions in parentheses. |
+| `max_line_len` | `false` | Maximum line length for the beautified output. |
+| `width` | `80` | Target line width the beautifier tries to respect. |
+| `braces` | `false` | Always insert braces in `if`, `for`, `do`, `while`, and `with` statements, even for single-statement bodies. |
+
+## Output options without beautify (`-O` / `--output-opts`)
+
+Use `-O` to set output options without enabling beautification. This is useful for tweaking the minified output format, such as changing quote style or enabling `ascii_only`, without pretty-printing.
+
+```bash
+# Output with ASCII-only escaping (no Unicode literals)
+uglifyjs input.js -c -m -O ascii_only -o output.js
+
+# Keep quoted property keys
+uglifyjs input.js -c -m -O keep_quoted_props -o output.js
+```
+
+<Note>
+`-b` and `-O` cannot be used together. Use `-b` when you want beautification; use `-O` when you only want to set output options on minified code.
+</Note>
+
+**Common `-O` sub-options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `ascii_only` | `false` | Escape all non-ASCII characters in strings and regexps. |
+| `keep_quoted_props` | `false` | Prevent stripping quotes from property names in object literals. |
+| `semicolons` | `true` | Use newlines instead of semicolons where possible when set to `false`, producing more readable minified output. |
+| `preserve_line` | `false` | Retain line numbering on a best-effort basis. |
+| `quote_keys` | `false` | Quote all keys in object literals. |
+| `inline_script` | `true` | Escape `</script>` and HTML comments in strings. |
+
+## Preserving comments (`--comments`)
+
+The `--comments` flag controls which comments survive in the output. By default, UglifyJS keeps JSDoc-style comments that contain `@license`, `@preserve`, or `@cc_on` — the same behavior as Google Closure Compiler.
+
+```bash
+# Default: keeps @license and @preserve comments
+uglifyjs input.js -c -m --comments -o output.js
+
+# Keep all comments
+uglifyjs input.js -c -m --comments all -o output.js
+
+# Keep only comments matching a regex
+uglifyjs input.js -c -m --comments "/^!/" -o output.js
+```
+
+The regex form accepts any valid JavaScript regular expression. The pattern `"/^!/"` preserves comments like `/*! Copyright Notice */`, which is a common convention for license headers.
+
+### When comments are lost
+
+Even with `--comments`, some comments may be removed. UglifyJS can only preserve comments that are attached to AST nodes that survive compression. If the node a comment is attached to is removed (for example, by dead code elimination), the comment is removed with it.
+
+```javascript
+function f() {
+    /** @preserve Foo Bar */
+    function g() {
+        // this function is never called
+    }
+    return something();
+}
+```
+
+The `@preserve` comment above is attached to `g`, which is removed by the compressor as unreferenced. The comment is therefore lost even though it contains `@preserve`.
+
+<Tip>
+Place copyright and license comments on top-level nodes — the outermost function, a top-level `var`, or a standalone comment at the beginning of the file — to ensure they are never attached to nodes the compressor might remove.
+</Tip>
+
+## Adding a preamble (`preamble`)
+
+Use the `-b` flag's `preamble` sub-option to prepend a string to the output verbatim. The string is not parsed, but source maps are adjusted to account for its presence.
+
+```bash
+uglifyjs input.js -c -m \
+  -b "preamble='/* Copyright 2024 Example Corp. All rights reserved. */'" \
+  -o output.js
+```
+
+The preamble is inserted before any generated code, so it appears at the very top of the output file. This is the recommended way to inject license headers rather than relying on `--comments`, which depends on the original source containing the comment.
+
+## Full options reference
+
+For every available output option with its type and default value, see the [output options reference](/options/output).

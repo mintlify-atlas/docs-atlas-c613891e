@@ -1,0 +1,208 @@
+---
+title: "minify() — UglifyJS Node.js API"
+description: "Complete reference for UglifyJS's minify() function: accepted input formats, all return value fields, and runnable examples for every common use case."
+---
+
+The UglifyJS Node.js API exposes a single top-level function, `minify()`, that runs the full minification pipeline — parsing, compression, mangling, and code generation — in one call. It never throws; instead, any error is returned as `result.error` so you can decide how to handle it. By default, both compression and mangling are enabled, but every phase is independently configurable or skippable via the options object.
+
+## Installation
+
+```bash
+npm install uglify-js
+```
+
+```javascript
+var UglifyJS = require("uglify-js");
+```
+
+## Signature
+
+```javascript
+minify(files, options)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `files` | `string \| object \| AST_Node` | Source code, a map of filenames to source strings, or a native UglifyJS AST |
+| `options` | `object` | Minification options (optional) |
+
+The `files` argument is flexible:
+
+- **String** — treated as raw source code with no filename.
+- **Object** — keys are filenames, values are source strings. Files are parsed in the same global scope, so cross-file references resolve correctly.
+- **AST\_Node** — a pre-built native UglifyJS AST, which skips the parse phase.
+
+## Return value
+
+`minify()` always returns a plain object. Check `result.error` before using `result.code`.
+
+<ResponseField name="code" type="string">
+  The minified JavaScript output as a string. Present when `output.code` is not `false` (the default).
+</ResponseField>
+
+<ResponseField name="map" type="string">
+  The source map as a JSON string. Only present when `sourceMap` is enabled in options.
+</ResponseField>
+
+<ResponseField name="ast" type="AST_Node">
+  The native UglifyJS AST after all transforms. Only present when `output.ast` is `true`.
+</ResponseField>
+
+<ResponseField name="warnings" type="string[]">
+  Array of warning strings emitted during compression. Only present when `warnings: true` is set in options.
+</ResponseField>
+
+<ResponseField name="error" type="object">
+  An error object if minification failed, `undefined` otherwise. Fields include `message`, `filename`, `line`, `col`, and `pos`.
+</ResponseField>
+
+<ResponseField name="timings" type="object">
+  A breakdown of time (in seconds) spent in each phase: `parse`, `rename`, `compress`, `scope`, `mangle`, `properties`, `output`, and `total`. Only present when `timings: true` is set in options.
+</ResponseField>
+
+## Examples
+
+### Basic usage
+
+Pass a string of source code directly. The result's `code` field contains the minified output.
+
+```javascript
+var code = "function add(first, second) { return first + second; }";
+var result = UglifyJS.minify(code);
+console.log(result.error); // undefined if no error
+console.log(result.code);  // function add(n,d){return n+d}
+```
+
+### Multiple files as an object
+
+Pass an object where keys are filenames and values are source strings. All files are parsed in the same global scope.
+
+```javascript
+var code = {
+    "file1.js": "function add(first, second) { return first + second; }",
+    "file2.js": "console.log(add(1 + 2, 3 + 4));"
+};
+var result = UglifyJS.minify(code);
+console.log(result.code);
+// function add(d,n){return d+n}console.log(add(3,7));
+```
+
+### With `toplevel`
+
+Enable `toplevel` to mangle and drop top-level variables and functions that are not referenced.
+
+```javascript
+var code = {
+    "file1.js": "function add(first, second) { return first + second; }",
+    "file2.js": "console.log(add(1 + 2, 3 + 4));"
+};
+var result = UglifyJS.minify(code, { toplevel: true });
+console.log(result.code);
+// console.log(3+7);
+```
+
+### With `nameCache`
+
+Pass a shared `nameCache` object to keep mangled names consistent across separate `minify()` calls — useful when minifying files independently that reference each other.
+
+```javascript
+var options = {
+    mangle: {
+        toplevel: true,
+    },
+    nameCache: {}
+};
+var result1 = UglifyJS.minify({
+    "file1.js": "function add(first, second) { return first + second; }"
+}, options);
+var result2 = UglifyJS.minify({
+    "file2.js": "console.log(add(1 + 2, 3 + 4));"
+}, options);
+console.log(result1.code);
+// function n(n,r){return n+r}
+console.log(result2.code);
+// console.log(n(3,7));
+```
+
+### Persisting `nameCache` to the filesystem
+
+Read and write `nameCache` as JSON to persist mangled name mappings between build runs.
+
+```javascript
+var fs = require("fs");
+var cacheFileName = "/tmp/cache.json";
+var options = {
+    mangle: {
+        properties: true,
+    },
+    nameCache: JSON.parse(fs.readFileSync(cacheFileName, "utf8"))
+};
+fs.writeFileSync("part1.js", UglifyJS.minify({
+    "file1.js": fs.readFileSync("file1.js", "utf8"),
+    "file2.js": fs.readFileSync("file2.js", "utf8")
+}, options).code, "utf8");
+fs.writeFileSync("part2.js", UglifyJS.minify({
+    "file3.js": fs.readFileSync("file3.js", "utf8"),
+    "file4.js": fs.readFileSync("file4.js", "utf8")
+}, options).code, "utf8");
+fs.writeFileSync(cacheFileName, JSON.stringify(options.nameCache), "utf8");
+```
+
+### Combination of options
+
+Mix `toplevel`, `compress`, and `output` options in a single call.
+
+```javascript
+var code = {
+    "file1.js": "function add(first, second) { return first + second; }",
+    "file2.js": "console.log(add(1 + 2, 3 + 4));"
+};
+var options = {
+    toplevel: true,
+    compress: {
+        global_defs: {
+            "@console.log": "alert"
+        },
+        passes: 2
+    },
+    output: {
+        beautify: false,
+        preamble: "/* uglified */"
+    }
+};
+var result = UglifyJS.minify(code, options);
+console.log(result.code);
+// /* uglified */
+// alert(10);
+```
+
+### Getting warnings
+
+Set `warnings: true` to collect compressor warnings in `result.warnings`.
+
+```javascript
+var code = "function f(){ var u; return 2 + 3; }";
+var result = UglifyJS.minify(code, { warnings: true });
+console.log(result.error);    // undefined
+console.log(result.warnings); // [ 'Dropping unused variable u [0:1,18]' ]
+console.log(result.code);     // function f(){return 5}
+```
+
+Use `warnings: "verbose"` for more detailed output.
+
+### Error handling
+
+`minify()` never throws. Always check `result.error` before using the output. To replicate throw-style behavior from v2:
+
+```javascript
+var result = UglifyJS.minify({"foo.js": "if (0) else console.log(1);"});
+console.log(JSON.stringify(result.error));
+// {"message":"Unexpected token: keyword (else)","filename":"foo.js","line":1,"col":7,"pos":7}
+
+// To throw on error (v2-style):
+if (result.error) throw result.error;
+```
+
+<Note>
+  Unlike `uglify-js@2.x`, the v3 API does not throw errors. Always check `result.error` before accessing `result.code`.
+</Note>

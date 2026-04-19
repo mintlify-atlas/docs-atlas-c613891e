@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "UglifyJS",
+  "projectType": "cli-tool",
+  "projectName": "UglifyJS",
+  "projectDescription": "A JavaScript parser, minifier, compressor, and beautifier toolkit available as both a CLI tool and Node.js library.",
   "theme": "luma",
-  "colors": {
-    "primary": "#f97316",
-    "light": "#fff7ed",
-    "dark": "#1a1a2e"
-  },
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/mishoo/UglifyJS"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/mishoo/UglifyJS"
-    }
-  },
+  "primaryColor": "#f97316",
+  "lightColor": "#fff7ed",
+  "darkColor": "#1a1a2e",
   "navigation": {
     "tabs": [
       {
@@ -72,5 +60,36 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "JavaScript parsing with custom AST",
+    "Dead code elimination and compression",
+    "Variable and property name mangling",
+    "Source map generation and composition",
+    "ES module support",
+    "Conditional compilation via global_defs",
+    "Multiple input file support",
+    "SpiderMonkey/Acorn AST interoperability",
+    "Name cache for consistent mangling across builds",
+    "Beautifier/code formatter output"
+  ],
+  "publicApiSurface": [
+    "minify(files, options)",
+    "UglifyJS.minify()",
+    "uglifyjs CLI command",
+    "--compress / -c",
+    "--mangle / -m",
+    "--mangle-props",
+    "--beautify / -b",
+    "--output / -o",
+    "--source-map",
+    "--define / -d",
+    "--toplevel",
+    "--name-cache",
+    "--module",
+    "--wrap",
+    "--enclose",
+    "TreeWalker",
+    "TreeTransformer"
+  ]
 }
